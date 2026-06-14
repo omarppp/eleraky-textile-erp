@@ -14,11 +14,16 @@ export interface SystemUser {
 }
 
 // ===================== DESIGN =====================
+export interface DesignWeft {
+  name: string;
+  notes?: string;
+}
+
 export interface Design {
   id: string;
   designNumber: string;
-  weft: string;
-  weftMotorOrder: string;
+  wefts: DesignWeft[];
+  weft?: string;        // legacy field — kept for backward compat with old Firestore docs
   warp: string;
   hadafatCount: number;
   assignedMachine: number;

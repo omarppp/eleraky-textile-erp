@@ -26,6 +26,7 @@ export const Cheques: React.FC = () => {
   const [form,     setForm]     = useState({ ...blank });
   const [search,   setSearch]   = useState('');
   const [deleteId, setDeleteId] = useState<string|null>(null);
+  const [saving,   setSaving]   = useState(false);
 
   const filtered = useMemo(() => {
     let list = [...cheques].sort((a,b) => a.dueDate.localeCompare(b.dueDate));
@@ -48,14 +49,25 @@ export const Cheques: React.FC = () => {
     if (!form.chequeNumber || !form.customerName || !form.amount || !form.dueDate) {
       toast('يرجى ملء الحقول المطلوبة', 'error'); return;
     }
-    await addCheque(form);
-    toast('تم إضافة الشيك');
-    setOpen(false); setForm({ ...blank });
+    setSaving(true);
+    try {
+      await addCheque(form);
+      toast('تم إضافة الشيك');
+      setOpen(false); setForm({ ...blank });
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const changeStatus = async (id: string, status: ChequeStatus) => {
-    await updateCheque(id, { status });
-    toast(status === 'collected' ? 'تم تحصيل الشيك ✓' : 'تم تحديث الحالة');
+    try {
+      await updateCheque(id, { status });
+      toast(status === 'collected' ? 'تم تحصيل الشيك ✓' : 'تم تحديث الحالة');
+    } catch {
+      toast('حدث خطأ أثناء تحديث الحالة.', 'error');
+    }
   };
 
   const set = (k: keyof typeof blank, v: unknown) => setForm(p => ({ ...p, [k]: v }));
@@ -137,7 +149,7 @@ export const Cheques: React.FC = () => {
         emptyText="لا توجد شيكات" emptyIcon="🏦" />
 
       <Modal open={open} onClose={()=>setOpen(false)} title="إضافة شيك جديد" size="md"
-        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave}>حفظ الشيك</Button></div>}>
+        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave} disabled={saving}>{saving ? 'جارٍ الحفظ...' : 'حفظ الشيك'}</Button></div>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input label="رقم الشيك *" value={form.chequeNumber} onChange={e=>set('chequeNumber',e.target.value)} placeholder="CHK-001" />
@@ -155,7 +167,7 @@ export const Cheques: React.FC = () => {
       </Modal>
 
       <ConfirmDialog open={!!deleteId} onClose={()=>setDeleteId(null)}
-        onConfirm={async()=>{await deleteCheque(deleteId!); setDeleteId(null); toast('تم الحذف');}}
+        onConfirm={async()=>{ try { await deleteCheque(deleteId!); setDeleteId(null); toast('تم الحذف'); } catch { toast('حدث خطأ أثناء الحذف.', 'error'); } }}
         title="حذف الشيك" message="هل تريد حذف هذا الشيك؟" />
     </div>
   );

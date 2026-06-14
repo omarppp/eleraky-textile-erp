@@ -89,6 +89,8 @@ export const Employees: React.FC = () => {
         toast('تمت إضافة الموظف بنجاح');
       }
       setModalOpen(false);
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
     } finally { setLoading(false); }
   };
 
@@ -99,6 +101,8 @@ export const Employees: React.FC = () => {
       await deleteEmployee(selected.id);
       toast('تم حذف الموظف');
       setDeleteOpen(false); setSelected(null);
+    } catch {
+      toast('حدث خطأ أثناء الحذف.', 'error');
     } finally { setLoading(false); }
   };
 

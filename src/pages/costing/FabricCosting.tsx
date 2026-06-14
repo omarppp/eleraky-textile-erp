@@ -220,6 +220,8 @@ export const FabricCosting: React.FC = () => {
         toast('تمت إضافة سجل التكاليف بنجاح');
       }
       setFormOpen(false);
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
     } finally { setLoading(false); }
   };
 
@@ -809,7 +811,7 @@ export const FabricCosting: React.FC = () => {
 
       <ConfirmDialog
         open={!!deleteId} onClose={() => setDeleteId(null)}
-        onConfirm={async () => { await deleteFabricCosting(deleteId!); setDeleteId(null); toast('تم حذف السجل'); }}
+        onConfirm={async () => { try { await deleteFabricCosting(deleteId!); setDeleteId(null); toast('تم حذف السجل'); } catch { toast('حدث خطأ أثناء الحذف.', 'error'); } }}
         title="حذف سجل التكاليف"
         message="هل تريد حذف هذا السجل؟ لا يمكن التراجع."
       />

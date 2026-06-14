@@ -40,6 +40,7 @@ export const Journal: React.FC = () => {
   const [form,    setForm]    = useState(blank);
   const [search,  setSearch]  = useState('');
   const [filter,  setFilter]  = useState('all');
+  const [saving,  setSaving]  = useState(false);
 
   const filtered = useMemo(() => {
     let list = [...journal].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
@@ -55,9 +56,16 @@ export const Journal: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.description || !form.date) { toast('يرجى ملء جميع الحقول المطلوبة', 'error'); return; }
-    await addJournalEntry(form);
-    toast('تم إضافة القيد بنجاح');
-    setOpen(false); setForm(blank);
+    setSaving(true);
+    try {
+      await addJournalEntry(form);
+      toast('تم إضافة القيد بنجاح');
+      setOpen(false); setForm(blank);
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const set = (k: keyof typeof blank, v: unknown) => setForm(p => ({ ...p, [k]: v }));
@@ -117,7 +125,7 @@ export const Journal: React.FC = () => {
 
       {/* Add Modal */}
       <Modal open={open} onClose={()=>setOpen(false)} title="إضافة قيد يومية" size="md"
-        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave}>حفظ القيد</Button></div>}>
+        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave} disabled={saving}>{saving ? 'جارٍ الحفظ...' : 'حفظ القيد'}</Button></div>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Select label="نوع القيد *" value={form.type} onChange={e=>set('type',e.target.value as JournalEntryType)} options={typeOpts} />

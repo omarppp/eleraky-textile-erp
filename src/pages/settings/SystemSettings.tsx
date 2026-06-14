@@ -56,6 +56,7 @@ export const SystemSettingsPage: React.FC = () => {
   }, [canView]);
 
   const handleSave = async () => {
+    if (!settings.companyName.trim()) { toast('اسم الشركة مطلوب', 'error'); return; }
     setSaving(true);
     try {
       await setDoc(doc(db, 'settings', 'system'), {

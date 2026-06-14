@@ -5,15 +5,16 @@ import {
   Button, Card, Badge, Modal, Input, Select, Textarea,
   ConfirmDialog, SearchInput, SectionHeader, Table, useToast,
 } from '../components/ui';
-import type { Design } from '../types';
+import type { Design, DesignWeft } from '../types';
 import { formatDate } from '../lib/utils';
 
 const MACHINE_OPTIONS = Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: `ماكينة ${i + 1}` }));
 
-const emptyForm = (): Omit<Design, 'id' | 'createdAt' | 'updatedAt'> => ({
+interface WeftFormItem { name: string; notes: string; }
+
+const emptyForm = () => ({
   designNumber: '',
-  weft: '',
-  weftMotorOrder: '',
+  wefts: [{ name: '', notes: '' }] as WeftFormItem[],
   warp: '',
   hadafatCount: 4,
   assignedMachine: 1,
@@ -21,24 +22,38 @@ const emptyForm = (): Omit<Design, 'id' | 'createdAt' | 'updatedAt'> => ({
   notes: '',
 });
 
+/** Returns the wefts array for a design, falling back to the legacy `weft` string field. */
+const getWefts = (d: Design): DesignWeft[] => {
+  if (d.wefts && d.wefts.length > 0) return d.wefts;
+  if (d.weft) return [{ name: d.weft }];
+  return [];
+};
+
 export const Designs: React.FC = () => {
   const { designs, addDesign, updateDesign, deleteDesign } = useData();
   const { toast } = useToast();
 
-  const [search,      setSearch]      = useState('');
-  const [machineF,    setMachineF]    = useState('');
-  const [modalOpen,   setModalOpen]   = useState(false);
-  const [detailOpen,  setDetailOpen]  = useState(false);
-  const [deleteOpen,  setDeleteOpen]  = useState(false);
-  const [selected,    setSelected]    = useState<Design | null>(null);
-  const [editing,     setEditing]     = useState(false);
-  const [form,        setForm]        = useState(emptyForm());
-  const [loading,     setLoading]     = useState(false);
-  const [errors,      setErrors]      = useState<Partial<Record<keyof typeof form, string>>>({});
+  const [search,     setSearch]     = useState('');
+  const [machineF,   setMachineF]   = useState('');
+  const [modalOpen,  setModalOpen]  = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [selected,   setSelected]   = useState<Design | null>(null);
+  const [editing,    setEditing]    = useState(false);
+  const [form,       setForm]       = useState(emptyForm());
+  const [loading,    setLoading]    = useState(false);
+  const [errors,     setErrors]     = useState<Record<string, string>>({});
 
   const filtered = useMemo(() => {
     let d = [...designs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    if (search)   d = d.filter(x => x.designNumber.includes(search) || x.weft.includes(search) || x.warp.includes(search));
+    if (search) d = d.filter(x => {
+      const wefts = getWefts(x);
+      return (
+        x.designNumber.includes(search) ||
+        x.warp.includes(search) ||
+        wefts.some(w => w.name.includes(search))
+      );
+    });
     if (machineF) d = d.filter(x => String(x.assignedMachine) === machineF);
     return d;
   }, [designs, search, machineF]);
@@ -53,22 +68,41 @@ export const Designs: React.FC = () => {
   const openEdit = (d: Design) => {
     setEditing(true);
     setSelected(d);
+    const existingWefts = getWefts(d);
     setForm({
-      designNumber: d.designNumber, weft: d.weft, weftMotorOrder: d.weftMotorOrder,
-      warp: d.warp, hadafatCount: d.hadafatCount, assignedMachine: d.assignedMachine,
-      imageUrl: d.imageUrl || '', notes: d.notes || '',
+      designNumber: d.designNumber,
+      wefts: existingWefts.length > 0
+        ? existingWefts.map(w => ({ name: w.name, notes: w.notes || '' }))
+        : [{ name: '', notes: '' }],
+      warp: d.warp,
+      hadafatCount: d.hadafatCount,
+      assignedMachine: d.assignedMachine,
+      imageUrl: d.imageUrl || '',
+      notes: d.notes || '',
     });
     setErrors({});
     setModalOpen(true);
   };
 
+  const addWeft = () =>
+    setForm(p => ({ ...p, wefts: [...p.wefts, { name: '', notes: '' }] }));
+
+  const removeWeft = (i: number) =>
+    setForm(p => ({ ...p, wefts: p.wefts.filter((_, j) => j !== i) }));
+
+  const updateWeft = (i: number, field: keyof WeftFormItem, value: string) =>
+    setForm(p => {
+      const updated = [...p.wefts];
+      updated[i] = { ...updated[i], [field]: value };
+      return { ...p, wefts: updated };
+    });
+
   const validate = () => {
-    const e: Partial<Record<keyof typeof form, string>> = {};
-    if (!form.designNumber.trim())  e.designNumber = 'رقم التصميم مطلوب';
-    if (!form.weft.trim())          e.weft         = 'اللحمة مطلوبة';
-    if (!form.warp.trim())          e.warp         = 'السدا مطلوب';
-    if (!form.weftMotorOrder.trim()) e.weftMotorOrder = 'أمر المحرك مطلوب';
-    if (form.hadafatCount < 1)      e.hadafatCount = 'عدد الحدافات يجب أن يكون أكبر من صفر';
+    const e: Record<string, string> = {};
+    if (!form.designNumber.trim()) e.designNumber = 'رقم التصميم مطلوب';
+    if (!form.wefts[0]?.name.trim()) e.wefts = 'اللحمة الأولى مطلوبة';
+    if (!form.warp.trim()) e.warp = 'السدا مطلوب';
+    if (form.hadafatCount < 1) e.hadafatCount = 'عدد الحدافات يجب أن يكون أكبر من صفر';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -77,11 +111,23 @@ export const Designs: React.FC = () => {
     if (!validate()) return;
     setLoading(true);
     try {
+      const cleanWefts = form.wefts
+        .filter(w => w.name.trim())
+        .map(w => ({ name: w.name.trim(), ...(w.notes.trim() ? { notes: w.notes.trim() } : {}) }));
+      const payload = {
+        designNumber: form.designNumber,
+        wefts: cleanWefts.length > 0 ? cleanWefts : [{ name: form.wefts[0].name }],
+        warp: form.warp,
+        hadafatCount: form.hadafatCount,
+        assignedMachine: form.assignedMachine,
+        imageUrl: form.imageUrl,
+        notes: form.notes,
+      };
       if (editing && selected) {
-        await updateDesign(selected.id, form);
+        await updateDesign(selected.id, payload);
         toast('تم تحديث التصميم بنجاح');
       } else {
-        await addDesign(form);
+        await addDesign(payload);
         toast('تمت إضافة التصميم بنجاح');
       }
       setModalOpen(false);
@@ -111,8 +157,19 @@ export const Designs: React.FC = () => {
     { key: 'designNumber', title: 'رقم التصميم', render: (d: Design) => (
       <span className="font-mono font-bold text-gold">{d.designNumber}</span>
     )},
-    { key: 'weft',  title: 'اللحمة',  render: (d: Design) => <span className="text-gray-300">{d.weft}</span> },
-    { key: 'warp',  title: 'السدا',   render: (d: Design) => <span className="text-gray-300">{d.warp}</span> },
+    { key: 'wefts', title: 'اللحمة', render: (d: Design) => {
+      const wefts = getWefts(d);
+      if (wefts.length === 0) return <span className="text-gray-600">—</span>;
+      return (
+        <div>
+          <span className="text-gray-300 text-sm">{wefts[0].name}</span>
+          {wefts.length > 1 && (
+            <span className="text-xs text-gray-500 block">+{wefts.length - 1} لحمة</span>
+          )}
+        </div>
+      );
+    }},
+    { key: 'warp',  title: 'السدا', render: (d: Design) => <span className="text-gray-300">{d.warp}</span> },
     { key: 'hadafatCount', title: 'الحدافات', render: (d: Design) => (
       <Badge color="blue">{d.hadafatCount}</Badge>
     )},
@@ -145,16 +202,14 @@ export const Designs: React.FC = () => {
       <SectionHeader
         title="إدارة التصميمات"
         subtitle={`${designs.length} تصميم مسجل`}
-        actions={
-          <Button icon={<Plus size={16} />} onClick={openAdd}>إضافة تصميم</Button>
-        }
+        actions={<Button icon={<Plus size={16} />} onClick={openAdd}>إضافة تصميم</Button>}
       />
 
       {/* Filters */}
       <Card>
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-48">
-            <SearchInput value={search} onChange={setSearch} placeholder="بحث برقم التصميم أو المادة..." />
+            <SearchInput value={search} onChange={setSearch} placeholder="بحث برقم التصميم أو اللحمة أو السدا..." />
           </div>
           <div className="min-w-44">
             <Select
@@ -169,9 +224,7 @@ export const Designs: React.FC = () => {
               مسح الفلاتر
             </Button>
           )}
-          <div className="mr-auto text-sm text-gray-500">
-            {filtered.length} نتيجة
-          </div>
+          <div className="mr-auto text-sm text-gray-500">{filtered.length} نتيجة</div>
         </div>
       </Card>
 
@@ -203,6 +256,7 @@ export const Designs: React.FC = () => {
         }
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Row 1 */}
           <Input
             label="رقم التصميم *"
             value={form.designNumber}
@@ -216,20 +270,51 @@ export const Designs: React.FC = () => {
             onChange={e => setForm(p => ({ ...p, assignedMachine: Number(e.target.value) }))}
             options={MACHINE_OPTIONS}
           />
-          <Input
-            label="اللحمة (Weft) *"
-            value={form.weft}
-            onChange={e => setForm(p => ({ ...p, weft: e.target.value }))}
-            placeholder="نوع خيط اللحمة"
-            error={errors.weft}
-          />
-          <Input
-            label="أمر محرك اللحمة للمريجات *"
-            value={form.weftMotorOrder}
-            onChange={e => setForm(p => ({ ...p, weftMotorOrder: e.target.value }))}
-            placeholder="A1, B2..."
-            error={errors.weftMotorOrder}
-          />
+
+          {/* Wefts section — full width */}
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-xs font-semibold text-amber-400 uppercase tracking-widest">اللحمات</label>
+              <Button size="sm" variant="ghost" icon={<Plus size={13} />} onClick={addWeft}>
+                إضافة لحمة
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {form.wefts.map((weft, i) => (
+                <div key={i} className="bg-dark-raised border border-dark-border rounded-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-400 font-medium">اللحمة {i + 1}</span>
+                    {form.wefts.length > 1 && (
+                      <button
+                        onClick={() => removeWeft(i)}
+                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-red-400 transition-colors px-2 py-1 rounded-lg hover:bg-red-500/10"
+                      >
+                        <Trash2 size={12} />
+                        حذف اللحمة
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Input
+                      label={`نوع اللحمة ${i + 1} *`}
+                      value={weft.name}
+                      onChange={e => updateWeft(i, 'name', e.target.value)}
+                      placeholder={`نوع خيط اللحمة ${i + 1}`}
+                      error={i === 0 ? errors.wefts : undefined}
+                    />
+                    <Input
+                      label="ملاحظات (اختياري)"
+                      value={weft.notes}
+                      onChange={e => updateWeft(i, 'notes', e.target.value)}
+                      placeholder="مواصفات أو ملاحظات..."
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Warp + Hadafat */}
           <Input
             label="السدا (Warp) *"
             value={form.warp}
@@ -245,6 +330,8 @@ export const Designs: React.FC = () => {
             onChange={e => setForm(p => ({ ...p, hadafatCount: Number(e.target.value) }))}
             error={errors.hadafatCount}
           />
+
+          {/* Image URL */}
           <div className="sm:col-span-2">
             <Input
               label="رابط صورة التصميم"
@@ -253,9 +340,11 @@ export const Designs: React.FC = () => {
               placeholder="https://... أو اتركه فارغاً"
             />
           </div>
+
+          {/* Notes */}
           <div className="sm:col-span-2">
             <Textarea
-              label="ملاحظات"
+              label="ملاحظات عامة"
               value={form.notes}
               onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
               placeholder="أي ملاحظات إضافية..."
@@ -268,27 +357,27 @@ export const Designs: React.FC = () => {
       {selected && (
         <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={`تصميم ${selected.designNumber}`} size="lg">
           <div className="space-y-5">
-            {selected.imageUrl && (
+            {/* Image */}
+            {selected.imageUrl ? (
               <div className="rounded-xl overflow-hidden border border-dark-border bg-dark-raised flex items-center justify-center h-48">
                 <img src={selected.imageUrl} alt={selected.designNumber} className="max-h-full object-contain" />
               </div>
-            )}
-            {!selected.imageUrl && (
-              <div className="rounded-xl border border-dark-border bg-dark-raised h-32 flex items-center justify-center">
+            ) : (
+              <div className="rounded-xl border border-dark-border bg-dark-raised h-28 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2 text-gray-600">
-                  <Image size={32} />
-                  <span className="text-sm">لا توجد صورة</span>
+                  <Image size={28} />
+                  <span className="text-xs">لا توجد صورة</span>
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+
+            {/* Basic info grid */}
+            <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'رقم التصميم',    value: selected.designNumber },
-                { label: 'اللحمة',         value: selected.weft },
-                { label: 'أمر المحرك',    value: selected.weftMotorOrder },
-                { label: 'السدا',          value: selected.warp },
-                { label: 'عدد الحدافات', value: selected.hadafatCount },
-                { label: 'الماكينة',      value: `ماكينة ${selected.assignedMachine}` },
+                { label: 'رقم التصميم', value: selected.designNumber },
+                { label: 'السدا',       value: selected.warp },
+                { label: 'عدد الحدافات', value: String(selected.hadafatCount) },
+                { label: 'الماكينة',    value: `ماكينة ${selected.assignedMachine}` },
               ].map(r => (
                 <div key={r.label} className="bg-dark-raised rounded-xl p-3 border border-dark-border">
                   <p className="text-xs text-gray-500 mb-1">{r.label}</p>
@@ -296,12 +385,40 @@ export const Designs: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Wefts */}
+            {(() => {
+              const wefts = getWefts(selected);
+              if (wefts.length === 0) return null;
+              return (
+                <div className="bg-dark-raised rounded-xl border border-dark-border overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-dark-border/50 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-widest">اللحمات</span>
+                    <span className="text-xs text-gray-600">({wefts.length})</span>
+                  </div>
+                  <div className="divide-y divide-dark-border/40">
+                    {wefts.map((w, i) => (
+                      <div key={i} className="px-4 py-3 flex items-start gap-3">
+                        <span className="text-xs text-gray-500 min-w-16 pt-0.5">اللحمة {i + 1}</span>
+                        <div>
+                          <p className="text-sm font-semibold text-white">{w.name}</p>
+                          {w.notes && <p className="text-xs text-gray-500 mt-0.5">{w.notes}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Notes */}
             {selected.notes && (
               <div className="bg-dark-raised rounded-xl p-3 border border-dark-border">
                 <p className="text-xs text-gray-500 mb-1">ملاحظات</p>
                 <p className="text-sm text-gray-300">{selected.notes}</p>
               </div>
             )}
+
             <div className="flex gap-2">
               <Button variant="outline" icon={<Pencil size={14} />} onClick={() => { setDetailOpen(false); openEdit(selected); }}>
                 تعديل

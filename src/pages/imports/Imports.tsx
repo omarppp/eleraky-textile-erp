@@ -53,6 +53,7 @@ export const Imports: React.FC = () => {
   const [statusF,  setStatusF]  = useState<ImportStatus|'all'>('all');
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [form,     setForm]     = useState(blankForm);
+  const [saving,   setSaving]   = useState(false);
 
   const filtered = useMemo(() => {
     let list = [...imports].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
@@ -78,9 +79,16 @@ export const Imports: React.FC = () => {
     if (!form.supplierName || !form.country || !form.materialType || !form.weightKg) {
       toast('يرجى ملء الحقول المطلوبة', 'error'); return;
     }
-    await addImport(form);
-    toast('تم تسجيل الشحنة');
-    setOpen(false); setForm(blankForm);
+    setSaving(true);
+    try {
+      await addImport(form);
+      toast('تم تسجيل الشحنة');
+      setOpen(false); setForm(blankForm);
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAddToPOY = async (imp: ImportShipment) => {
@@ -88,12 +96,24 @@ export const Imports: React.FC = () => {
     const poyItems = inventoryItems.filter(i => i.warehouse === 'poy');
     const addWeight = (imp.wastePercentage ?? 0) > 0 ? (imp.usableWeightKg ?? imp.weightKg) : imp.weightKg;
     const costPerKg = (imp.wastePercentage ?? 0) > 0 ? (imp.pricePerUsableKg ?? imp.landedCostPerKg) : imp.landedCostPerKg;
-    if (poyItems.length > 0) {
-      const item = poyItems[0];
-      await updateInventoryItem(item.id, { quantity: item.quantity + addWeight, costPerUnit: costPerKg });
+    try {
+      if (poyItems.length > 0) {
+        const item = poyItems[0];
+        await updateInventoryItem(item.id, { quantity: item.quantity + addWeight, costPerUnit: costPerKg });
+      }
+      await updateImport(imp.id, { addedToPOY: true, status: 'received' });
+      toast(`تم إضافة ${addWeight.toLocaleString()} كيلو صافي إلى مخزن POY`);
+    } catch {
+      toast('حدث خطأ أثناء الإضافة إلى مخزن POY.', 'error');
     }
-    await updateImport(imp.id, { addedToPOY: true, status: 'received' });
-    toast(`تم إضافة ${addWeight.toLocaleString()} كيلو صافي إلى مخزن POY`);
+  };
+
+  const handleStatusChange = async (id: string, status: ImportStatus) => {
+    try {
+      await updateImport(id, { status });
+    } catch {
+      toast('حدث خطأ أثناء تحديث الحالة.', 'error');
+    }
   };
 
   const columns = [
@@ -132,7 +152,7 @@ export const Imports: React.FC = () => {
       <span className="text-gray-400 text-xs">{r.expectedArrivalDate ? formatDate(r.expectedArrivalDate) : '—'}</span>
     )},
     { key: 'status', title: 'الحالة', render: (r: ImportShipment) => (
-      <Select value={r.status} onChange={e=>updateImport(r.id,{status:e.target.value as ImportStatus})}
+      <Select value={r.status} onChange={e=>handleStatusChange(r.id,e.target.value as ImportStatus)}
         options={statusOpts} className="text-xs py-1 min-w-0 w-32" />
     )},
     { key: 'poy', title: 'POY', render: (r: ImportShipment) => (
@@ -187,7 +207,7 @@ export const Imports: React.FC = () => {
         emptyText="لا توجد شحنات" emptyIcon="🚢" />
 
       <Modal open={open} onClose={()=>setOpen(false)} title="تسجيل شحنة استيراد جديدة" size="xl"
-        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave}>حفظ الشحنة</Button></div>}>
+        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave} disabled={saving}>{saving ? 'جارٍ الحفظ...' : 'حفظ الشحنة'}</Button></div>}>
         <div className="space-y-5">
           <h4 className="text-xs font-semibold text-green-pale uppercase tracking-widest pb-2 border-b border-dark-border">بيانات الشحنة</h4>
           <div className="grid grid-cols-2 gap-4">
@@ -284,7 +304,7 @@ export const Imports: React.FC = () => {
       </Modal>
 
       <ConfirmDialog open={!!deleteId} onClose={()=>setDeleteId(null)}
-        onConfirm={async()=>{await deleteImport(deleteId!); setDeleteId(null); toast('تم الحذف');}}
+        onConfirm={async()=>{ try { await deleteImport(deleteId!); setDeleteId(null); toast('تم الحذف'); } catch { toast('حدث خطأ أثناء الحذف.', 'error'); } }}
         title="حذف الشحنة" message="هل تريد حذف هذه الشحنة؟" />
     </div>
   );

@@ -36,6 +36,7 @@ export const Electronic: React.FC = () => {
   const [form,     setForm]     = useState({ ...blank });
   const [search,   setSearch]   = useState('');
   const [deleteId, setDeleteId] = useState<string|null>(null);
+  const [saving,   setSaving]   = useState(false);
 
   const filtered = useMemo(() => {
     let list = [...electronic].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
@@ -52,9 +53,16 @@ export const Electronic: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.party || !form.amount || !form.date) { toast('يرجى ملء الحقول المطلوبة', 'error'); return; }
-    await addElectronic({ ...form, netAmount: form.amount - form.fees });
-    toast('تم إضافة المعاملة');
-    setOpen(false); setForm({ ...blank });
+    setSaving(true);
+    try {
+      await addElectronic({ ...form, netAmount: form.amount - form.fees });
+      toast('تم إضافة المعاملة');
+      setOpen(false); setForm({ ...blank });
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
   const set = (k: keyof typeof blank, v: unknown) => setForm(p => ({ ...p, [k]: v }));
 
@@ -121,7 +129,7 @@ export const Electronic: React.FC = () => {
         emptyText="لا توجد معاملات إلكترونية" emptyIcon="📱" />
 
       <Modal open={open} onClose={()=>setOpen(false)} title="إضافة معاملة إلكترونية" size="md"
-        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave}>حفظ</Button></div>}>
+        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave} disabled={saving}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button></div>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Select label="نوع المعاملة *" value={form.type} onChange={e=>set('type',e.target.value as ElectronicTransaction['type'])} options={typeOpts} />
@@ -151,7 +159,7 @@ export const Electronic: React.FC = () => {
       </Modal>
 
       <ConfirmDialog open={!!deleteId} onClose={()=>setDeleteId(null)}
-        onConfirm={async()=>{await deleteElectronic(deleteId!); setDeleteId(null); toast('تم الحذف');}}
+        onConfirm={async()=>{ try { await deleteElectronic(deleteId!); setDeleteId(null); toast('تم الحذف'); } catch { toast('حدث خطأ أثناء الحذف.', 'error'); } }}
         title="حذف المعاملة" message="هل تريد حذف هذه المعاملة؟" />
     </div>
   );

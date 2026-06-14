@@ -40,6 +40,7 @@ export const Vouchers: React.FC = () => {
   const [search,  setSearch]  = useState('');
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [printing, setPrinting] = useState<CashVoucher|null>(null);
+  const [saving,  setSaving]  = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
@@ -55,9 +56,16 @@ export const Vouchers: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.party || !form.reason || !form.amount) { toast('يرجى ملء الحقول المطلوبة', 'error'); return; }
-    await addVoucher({ ...form, type: tab });
-    toast(tab==='receipt' ? 'تم إنشاء إذن الاستلام' : 'تم إنشاء إذن الصرف');
-    setOpen(false); setForm({ ...blank });
+    setSaving(true);
+    try {
+      await addVoucher({ ...form, type: tab });
+      toast(tab==='receipt' ? 'تم إنشاء إذن الاستلام' : 'تم إنشاء إذن الصرف');
+      setOpen(false); setForm({ ...blank });
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePrint = (v: CashVoucher) => { setPrinting(v); setTimeout(()=>window.print(), 300); };
@@ -105,7 +113,7 @@ export const Vouchers: React.FC = () => {
 
       {/* Add Modal */}
       <Modal open={open} onClose={()=>setOpen(false)} title={tab==='receipt'?'إذن استلام نقدي':'إذن صرف نقدي'} size="md"
-        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave}>حفظ الإذن</Button></div>}>
+        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave} disabled={saving}>{saving ? 'جارٍ الحفظ...' : 'حفظ الإذن'}</Button></div>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input label="التاريخ *" type="date" value={form.date} onChange={e=>set('date',e.target.value)} />
@@ -155,7 +163,7 @@ export const Vouchers: React.FC = () => {
         </div>
       )}
 
-      <ConfirmDialog open={!!deleteId} onClose={()=>setDeleteId(null)} onConfirm={async()=>{await deleteVoucher(deleteId!);setDeleteId(null);toast('تم الحذف');}}
+      <ConfirmDialog open={!!deleteId} onClose={()=>setDeleteId(null)} onConfirm={async()=>{ try { await deleteVoucher(deleteId!); setDeleteId(null); toast('تم الحذف'); } catch { toast('حدث خطأ أثناء الحذف.', 'error'); } }}
         title="حذف الإذن" message="هل تريد حذف هذا الإذن؟ لا يمكن التراجع." />
     </div>
   );

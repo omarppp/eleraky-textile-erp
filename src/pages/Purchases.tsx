@@ -36,6 +36,7 @@ export const Purchases: React.FC = () => {
   const [tabWh,    setTabWh]    = useState<WarehouseType|'all'>('all');
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [form,     setForm]     = useState({ ...blank });
+  const [saving,   setSaving]   = useState(false);
 
   const filtered = useMemo(() => {
     let list = [...purchases].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
@@ -70,9 +71,16 @@ export const Purchases: React.FC = () => {
     if (!form.supplierName || !form.materialName || !form.quantity || !form.unitPrice) {
       toast('يرجى ملء الحقول المطلوبة', 'error'); return;
     }
-    await addPurchase(form);
-    toast('تم تسجيل المشتريات وتحديث المخزن تلقائياً');
-    setOpen(false); setForm({ ...blank });
+    setSaving(true);
+    try {
+      await addPurchase(form);
+      toast('تم تسجيل المشتريات وتحديث المخزن تلقائياً');
+      setOpen(false); setForm({ ...blank });
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const warehouseLabel: Record<string, string> = { weft:'اللحمة', warp:'السدا', finished:'النهائي', reusable:'قابل للاستخدام', poy:'POY' };
@@ -132,7 +140,7 @@ export const Purchases: React.FC = () => {
         emptyText="لا توجد مشتريات" emptyIcon="📦" />
 
       <Modal open={open} onClose={()=>setOpen(false)} title="فاتورة شراء جديدة" size="lg"
-        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave}>حفظ وتحديث المخزن</Button></div>}>
+        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave} disabled={saving}>{saving ? 'جارٍ الحفظ...' : 'حفظ وتحديث المخزن'}</Button></div>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Select label="المورد *" value={form.supplierName} onChange={e=>set('supplierName',e.target.value)} options={supplierOpts} />
@@ -173,7 +181,7 @@ export const Purchases: React.FC = () => {
       </Modal>
 
       <ConfirmDialog open={!!deleteId} onClose={()=>setDeleteId(null)}
-        onConfirm={async()=>{await deletePurchase(deleteId!); setDeleteId(null); toast('تم الحذف');}}
+        onConfirm={async()=>{ try { await deletePurchase(deleteId!); setDeleteId(null); toast('تم الحذف'); } catch { toast('حدث خطأ أثناء الحذف.', 'error'); } }}
         title="حذف فاتورة الشراء" message="هل تريد حذف هذه الفاتورة؟ لن يتم استرداد الكمية من المخزن." />
     </div>
   );

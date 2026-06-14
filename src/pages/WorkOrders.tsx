@@ -47,7 +47,11 @@ export const WorkOrders: React.FC = () => {
   const [loading,    setLoading]    = useState(false);
   const [errors,     setErrors]     = useState<Partial<Record<string, string>>>({});
 
-  const designOptions = designs.map(d => ({ value: d.id, label: `${d.designNumber} — ${d.weft}` }));
+  const getDesignFirstWeft = (d: typeof designs[0]): string => {
+    if (d.wefts && d.wefts.length > 0) return d.wefts[0].name;
+    return d.weft || '';
+  };
+  const designOptions = designs.map(d => ({ value: d.id, label: `${d.designNumber}${getDesignFirstWeft(d) ? ` — ${getDesignFirstWeft(d)}` : ''}` }));
 
   const filtered = useMemo(() => {
     let d = [...workOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -253,6 +257,34 @@ export const WorkOrders: React.FC = () => {
           <Select label="التصميم" value={form.designId}
             onChange={e => setForm(p => ({ ...p, designId: e.target.value }))}
             options={designOptions} placeholder="اختر تصميماً" />
+          {/* Design wefts preview */}
+          {form.designId && (() => {
+            const d = designs.find(x => x.id === form.designId);
+            if (!d) return null;
+            const wefts = (d.wefts && d.wefts.length > 0) ? d.wefts : d.weft ? [{ name: d.weft }] : [];
+            return (
+              <div className="sm:col-span-2 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
+                <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest mb-2">اللحمات — تصميم {d.designNumber}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {wefts.map((w, i) => (
+                    <div key={i} className="bg-dark-surface border border-dark-border rounded-lg px-3 py-2">
+                      <p className="text-[10px] text-gray-500 mb-0.5">اللحمة {i + 1}</p>
+                      <p className="text-xs font-medium text-white">{w.name}</p>
+                      {w.notes && <p className="text-[10px] text-gray-600 mt-0.5">{w.notes}</p>}
+                    </div>
+                  ))}
+                  <div className="bg-dark-surface border border-dark-border rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-gray-500 mb-0.5">السدا</p>
+                    <p className="text-xs font-medium text-white">{d.warp}</p>
+                  </div>
+                  <div className="bg-dark-surface border border-dark-border rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-gray-500 mb-0.5">الحدافات</p>
+                    <p className="text-xs font-medium text-white">{d.hadafatCount}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <Input label="الصنف *" value={form.item}
             onChange={e => setForm(p => ({ ...p, item: e.target.value }))}
             placeholder="نوع القماش / الصنف" error={errors.item} />
@@ -327,6 +359,31 @@ export const WorkOrders: React.FC = () => {
                 <span>{selected.quantity} متر مطلوب</span>
               </div>
             </div>
+            {/* Design wefts detail */}
+            {selected.designId && (() => {
+              const d = designs.find(x => x.id === selected.designId);
+              if (!d) return null;
+              const wefts = (d.wefts && d.wefts.length > 0) ? d.wefts : d.weft ? [{ name: d.weft }] : [];
+              if (wefts.length === 0) return null;
+              return (
+                <div className="bg-dark-raised border border-dark-border rounded-xl overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-dark-border/50 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-widest">اللحمات</span>
+                    <span className="text-xs text-gray-500">تصميم {d.designNumber}</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-x-reverse divide-dark-border/40">
+                    {wefts.map((w, i) => (
+                      <div key={i} className="px-4 py-3">
+                        <p className="text-xs text-gray-500 mb-1">اللحمة {i + 1}</p>
+                        <p className="text-sm font-semibold text-white">{w.name}</p>
+                        {w.notes && <p className="text-xs text-gray-500 mt-0.5">{w.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {selected.notes && (
               <div className="bg-dark-raised border border-dark-border rounded-xl p-3">
                 <p className="text-xs text-gray-500 mb-1">ملاحظات</p>

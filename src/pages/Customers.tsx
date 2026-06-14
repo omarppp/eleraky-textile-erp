@@ -20,6 +20,7 @@ export const Customers: React.FC = () => {
   const [form,     setForm]     = useState({ ...blank });
   const [search,   setSearch]   = useState('');
   const [deleteId, setDeleteId] = useState<string|null>(null);
+  const [saving,   setSaving]   = useState(false);
 
   const filtered = useMemo(() => {
     let list = [...customers].sort((a,b)=>a.name.localeCompare(b.name,'ar'));
@@ -37,9 +38,16 @@ export const Customers: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.name || !form.phone) { toast('الاسم والهاتف مطلوبان', 'error'); return; }
-    await addCustomer(form);
-    toast('تم إضافة العميل');
-    setOpen(false); setForm({ ...blank });
+    setSaving(true);
+    try {
+      await addCustomer(form);
+      toast('تم إضافة العميل');
+      setOpen(false); setForm({ ...blank });
+    } catch {
+      toast('حدث خطأ أثناء الحفظ. حاول مرة أخرى.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const set = (k: keyof typeof blank, v: unknown) => setForm(p => ({ ...p, [k]: v }));
@@ -93,7 +101,7 @@ export const Customers: React.FC = () => {
 
       {/* Add Modal */}
       <Modal open={open} onClose={()=>setOpen(false)} title="إضافة عميل جديد" size="md"
-        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave}>حفظ العميل</Button></div>}>
+        footer={<div className="flex gap-3"><Button variant="ghost" className="flex-1" onClick={()=>setOpen(false)}>إلغاء</Button><Button className="flex-1" onClick={handleSave} disabled={saving}>{saving ? 'جارٍ الحفظ...' : 'حفظ العميل'}</Button></div>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input label="الاسم *" value={form.name} onChange={e=>set('name',e.target.value)} />
@@ -175,7 +183,7 @@ export const Customers: React.FC = () => {
       )}
 
       <ConfirmDialog open={!!deleteId} onClose={()=>setDeleteId(null)}
-        onConfirm={async()=>{await deleteCustomer(deleteId!); setDeleteId(null); toast('تم الحذف');}}
+        onConfirm={async()=>{ try { await deleteCustomer(deleteId!); setDeleteId(null); toast('تم الحذف'); } catch { toast('حدث خطأ أثناء الحذف.', 'error'); } }}
         title="حذف العميل" message="هل تريد حذف هذا العميل؟ سيتم حذف جميع بياناته." />
     </div>
   );
