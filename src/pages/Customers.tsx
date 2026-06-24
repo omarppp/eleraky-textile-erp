@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, Trash2, Eye, Phone, MapPin } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { Button, Modal, Input, Textarea, SearchInput, ConfirmDialog, SectionHeader, Table, Badge } from '../components/ui';
 import { useToast } from '../components/ui';
 import { formatCurrency } from '../lib/utils';
@@ -13,6 +14,7 @@ const blank: Omit<Customer, 'id'|'createdAt'|'updatedAt'> = {
 
 export const Customers: React.FC = () => {
   const { customers, invoices, vouchers, cheques, addCustomer, deleteCustomer } = useData();
+  const { hasPermission } = useAuth();
   const { toast } = useToast();
   const [open,     setOpen]     = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -22,6 +24,8 @@ export const Customers: React.FC = () => {
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [saving,   setSaving]   = useState(false);
 
+  const canSeeFinance = hasPermission('finance', 'view');
+
   const filtered = useMemo(() => {
     let list = [...customers].sort((a,b)=>a.name.localeCompare(b.name,'ar'));
     if (search) list = list.filter(c => c.name.includes(search) || (c.phone||'').includes(search) || (c.companyName||'').includes(search));
@@ -29,6 +33,7 @@ export const Customers: React.FC = () => {
   }, [customers, search]);
 
   const getBalance = (c: Customer) => {
+    if (!canSeeFinance) return 0;
     const invoiceTotal = invoices.filter(i=>i.customerName===c.name).reduce((s,i)=>s+i.total,0);
     const invoicePaid  = invoices.filter(i=>i.customerName===c.name).reduce((s,i)=>s+(i.paid??0),0);
     const voucherPaid  = vouchers.filter(v=>v.party===c.name&&v.type==='receipt').reduce((s,v)=>s+v.amount,0);
@@ -51,14 +56,14 @@ export const Customers: React.FC = () => {
   };
 
   const set = (k: keyof typeof blank, v: unknown) => setForm(p => ({ ...p, [k]: v }));
-
   const handleView = (c: Customer) => { setSelected(c); setViewOpen(true); };
 
-  const selectedInvoices = useMemo(() => selected ? invoices.filter(i=>i.customerName===selected.name) : [], [selected, invoices]);
-  const selectedVouchers  = useMemo(() => selected ? vouchers.filter(v=>v.party===selected.name) : [], [selected, vouchers]);
-  const selectedCheques   = useMemo(() => selected ? cheques.filter(c=>c.customerName===selected.name) : [], [selected, cheques]);
+  const selectedInvoices = useMemo(() => selected && canSeeFinance ? invoices.filter(i=>i.customerName===selected.name) : [], [selected, invoices, canSeeFinance]);
+  const selectedVouchers  = useMemo(() => selected && canSeeFinance ? vouchers.filter(v=>v.party===selected.name) : [], [selected, vouchers, canSeeFinance]);
+  const selectedCheques   = useMemo(() => selected && canSeeFinance ? cheques.filter(c=>c.customerName===selected.name) : [], [selected, cheques, canSeeFinance]);
 
-  const columns = [
+  // Build columns based on role
+  const baseColumns = [
     { key: 'name', title: 'الاسم', render: (r: Customer) => (
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl bg-green/10 border border-green/20 flex items-center justify-center text-green-pale font-bold">{r.name.charAt(0)}</div>
@@ -71,6 +76,9 @@ export const Customers: React.FC = () => {
     { key: 'address', title: 'العنوان', render: (r: Customer) => (
       r.address ? <div className="flex items-center gap-1.5"><MapPin size={12} className="text-gray-600"/><span className="text-gray-400 text-xs">{r.address}</span></div> : <span className="text-gray-700">—</span>
     )},
+  ];
+
+  const financeColumns = canSeeFinance ? [
     { key: 'balance', title: 'الرصيد المستحق', render: (r: Customer) => {
       const bal = getBalance(r);
       return <span className={`font-bold text-sm ${bal > 0 ? 'text-amber-400' : bal < 0 ? 'text-emerald-400' : 'text-gray-500'}`}>{formatCurrency(Math.abs(bal))}{bal > 0 ? ' م' : bal < 0 ? ' د' : ''}</span>;
@@ -79,6 +87,11 @@ export const Customers: React.FC = () => {
       const cnt = invoices.filter(i=>i.customerName===r.name).length;
       return cnt > 0 ? <Badge color="green">{cnt} فاتورة</Badge> : <span className="text-gray-700">—</span>;
     }},
+  ] : [];
+
+  const columns = [
+    ...baseColumns,
+    ...financeColumns,
     { key: 'actions', title: '', render: (r: Customer) => (
       <div className="flex items-center gap-1">
         <Button variant="ghost" size="sm" icon={<Eye size={13}/>} onClick={()=>handleView(r)}>عرض</Button>
@@ -113,7 +126,9 @@ export const Customers: React.FC = () => {
           </div>
           <Input label="اسم الشركة" value={form.companyName} onChange={e=>set('companyName',e.target.value)} />
           <Textarea label="العنوان" value={form.address} onChange={e=>set('address',e.target.value)} rows={2} />
-          <Input label="الرصيد الافتتاحي (جنيه)" type="number" value={form.openingBalance||''} onChange={e=>set('openingBalance',Number(e.target.value))} placeholder="0" />
+          {canSeeFinance && (
+            <Input label="الرصيد الافتتاحي (جنيه)" type="number" value={form.openingBalance||''} onChange={e=>set('openingBalance',Number(e.target.value))} placeholder="0" />
+          )}
           <Textarea label="ملاحظات" value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} />
         </div>
       </Modal>
@@ -130,53 +145,65 @@ export const Customers: React.FC = () => {
                 <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
                   {selected.phone && <span className="flex items-center gap-1"><Phone size={12}/>{selected.phone}</span>}
                   {selected.phone2 && <span className="flex items-center gap-1"><Phone size={12}/>{selected.phone2}</span>}
+                  {selected.address && <span className="flex items-center gap-1"><MapPin size={12}/>{selected.address}</span>}
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500">الرصيد المستحق</p>
-                <p className={`text-2xl font-black ${getBalance(selected)>0?'text-amber-400':'text-emerald-400'}`}>{formatCurrency(Math.abs(getBalance(selected)))}</p>
-                <p className="text-xs text-gray-500">{getBalance(selected)>0?'مستحق على العميل':'مستحق للعميل'}</p>
-              </div>
+              {canSeeFinance && (
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">الرصيد المستحق</p>
+                  <p className={`text-2xl font-black ${getBalance(selected)>0?'text-amber-400':'text-emerald-400'}`}>{formatCurrency(Math.abs(getBalance(selected)))}</p>
+                  <p className="text-xs text-gray-500">{getBalance(selected)>0?'مستحق على العميل':'مستحق للعميل'}</p>
+                </div>
+              )}
             </div>
 
-            {/* Summary cards */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-dark-card border border-dark-border rounded-xl p-3 text-center">
-                <p className="text-xs text-gray-500">الفواتير</p>
-                <p className="text-2xl font-bold text-white">{selectedInvoices.length}</p>
-                <p className="text-xs text-gray-600">{formatCurrency(selectedInvoices.reduce((s,i)=>s+i.total,0))}</p>
-              </div>
-              <div className="bg-dark-card border border-dark-border rounded-xl p-3 text-center">
-                <p className="text-xs text-gray-500">المدفوعات</p>
-                <p className="text-2xl font-bold text-emerald-400">{selectedVouchers.filter(v=>v.type==='receipt').length}</p>
-                <p className="text-xs text-gray-600">{formatCurrency(selectedVouchers.filter(v=>v.type==='receipt').reduce((s,v)=>s+v.amount,0))}</p>
-              </div>
-              <div className="bg-dark-card border border-dark-border rounded-xl p-3 text-center">
-                <p className="text-xs text-gray-500">الشيكات</p>
-                <p className="text-2xl font-bold text-amber-400">{selectedCheques.length}</p>
-                <p className="text-xs text-gray-600">{formatCurrency(selectedCheques.reduce((s,c)=>s+c.amount,0))}</p>
-              </div>
-            </div>
+            {/* Financial summary — finance users only */}
+            {canSeeFinance && (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-dark-card border border-dark-border rounded-xl p-3 text-center">
+                    <p className="text-xs text-gray-500">الفواتير</p>
+                    <p className="text-2xl font-bold text-white">{selectedInvoices.length}</p>
+                    <p className="text-xs text-gray-600">{formatCurrency(selectedInvoices.reduce((s,i)=>s+i.total,0))}</p>
+                  </div>
+                  <div className="bg-dark-card border border-dark-border rounded-xl p-3 text-center">
+                    <p className="text-xs text-gray-500">المدفوعات</p>
+                    <p className="text-2xl font-bold text-emerald-400">{selectedVouchers.filter(v=>v.type==='receipt').length}</p>
+                    <p className="text-xs text-gray-600">{formatCurrency(selectedVouchers.filter(v=>v.type==='receipt').reduce((s,v)=>s+v.amount,0))}</p>
+                  </div>
+                  <div className="bg-dark-card border border-dark-border rounded-xl p-3 text-center">
+                    <p className="text-xs text-gray-500">الشيكات</p>
+                    <p className="text-2xl font-bold text-amber-400">{selectedCheques.length}</p>
+                    <p className="text-xs text-gray-600">{formatCurrency(selectedCheques.reduce((s,c)=>s+c.amount,0))}</p>
+                  </div>
+                </div>
 
-            {/* Recent Invoices */}
-            {selectedInvoices.length > 0 && (
-              <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-                <p className="p-3 text-sm font-semibold text-white border-b border-dark-border">الفواتير الأخيرة</p>
-                <table className="w-full text-xs">
-                  <thead><tr className="bg-dark-raised"><th className="px-3 py-2 text-right text-gray-500">رقم</th><th className="px-3 py-2 text-right text-gray-500">التاريخ</th><th className="px-3 py-2 text-right text-gray-500">الإجمالي</th><th className="px-3 py-2 text-right text-gray-500">المدفوع</th><th className="px-3 py-2 text-right text-gray-500">الباقي</th></tr></thead>
-                  <tbody>
-                    {selectedInvoices.slice(0,5).map(inv => (
-                      <tr key={inv.id} className="border-t border-dark-border/50">
-                        <td className="px-3 py-2 font-mono text-green-pale">{inv.invoiceNumber}</td>
-                        <td className="px-3 py-2 text-gray-400">{inv.date}</td>
-                        <td className="px-3 py-2 text-gray-200">{formatCurrency(inv.total)}</td>
-                        <td className="px-3 py-2 text-emerald-400">{formatCurrency(inv.paid??0)}</td>
-                        <td className="px-3 py-2 text-amber-400">{formatCurrency(inv.total-(inv.paid??0))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                {selectedInvoices.length > 0 && (
+                  <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                    <p className="p-3 text-sm font-semibold text-white border-b border-dark-border">الفواتير الأخيرة</p>
+                    <table className="w-full text-xs">
+                      <thead><tr className="bg-dark-raised">
+                        <th className="px-3 py-2 text-right text-gray-500">رقم</th>
+                        <th className="px-3 py-2 text-right text-gray-500">التاريخ</th>
+                        <th className="px-3 py-2 text-right text-gray-500">الإجمالي</th>
+                        <th className="px-3 py-2 text-right text-gray-500">المدفوع</th>
+                        <th className="px-3 py-2 text-right text-gray-500">الباقي</th>
+                      </tr></thead>
+                      <tbody>
+                        {selectedInvoices.slice(0,5).map(inv => (
+                          <tr key={inv.id} className="border-t border-dark-border/50">
+                            <td className="px-3 py-2 font-mono text-green-pale">{inv.invoiceNumber}</td>
+                            <td className="px-3 py-2 text-gray-400">{inv.date}</td>
+                            <td className="px-3 py-2 text-gray-200">{formatCurrency(inv.total)}</td>
+                            <td className="px-3 py-2 text-emerald-400">{formatCurrency(inv.paid??0)}</td>
+                            <td className="px-3 py-2 text-amber-400">{formatCurrency(inv.total-(inv.paid??0))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </Modal>

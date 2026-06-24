@@ -26,6 +26,7 @@ const roleOpts = [
 const roleColors: Record<UserRole, string> = {
   full_admin:      'bg-green/15 text-green-pale border border-green/30',
   operations_user: 'bg-blue-500/15 text-blue-400 border border-blue-500/30',
+  marketing_user:  'bg-purple-500/15 text-purple-400 border border-purple-500/30',
   finance_user:    'bg-amber-500/15 text-amber-400 border border-amber-500/30',
 };
 
@@ -129,7 +130,8 @@ export const Users: React.FC = () => {
 
   const permSummary: Record<UserRole, string[]> = {
     full_admin:      ['لوحة التحكم','التصاميم','أوامر الشغل','المخازن','الماكينات','الفواتير','العملاء','المشتريات','الاستيراد','الماليات','التقارير','الإدارة'],
-    operations_user: ['لوحة التحكم','التصاميم','أوامر الشغل','المخازن','الماكينات','الفواتير','العملاء','المشتريات','الاستيراد'],
+    operations_user: ['لوحة التحكم','التصاميم','أوامر الشغل','المخازن','الماكينات','العملاء','الموظفين'],
+    marketing_user:  ['لوحة التحكم','التصاميم','أوامر الشغل','العملاء'],
     finance_user:    ['لوحة التحكم','الماليات','الفواتير','العملاء','التقارير'],
   };
 

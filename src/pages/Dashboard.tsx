@@ -36,8 +36,14 @@ const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.06 } }
 const fadeUp  = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 
 export const Dashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { workOrders, designs, inventoryItems, invoices, activity, customers, purchases, imports, cheques, electronic, vouchers } = useData();
+
+  const canSeeFinance   = hasPermission('finance',    'view');
+  const canSeePurchases = hasPermission('purchases', 'view');
+  const canSeeImports   = hasPermission('import',    'view');
+  const canSeeInventory = hasPermission('inventory', 'view');
+  const canSeeMachines  = hasPermission('machines',  'view');
 
   const stats = useMemo(() => {
     const active    = workOrders.filter(w => w.status === 'in_production').length;
@@ -51,7 +57,7 @@ export const Dashboard: React.FC = () => {
       return { number: i + 1, status: (wo ? 'active' : 'idle') as MachineStatus, workOrder: wo };
     });
 
-    // Finance
+    // Finance (only meaningful for full_admin / finance_user)
     const totalIncome  = vouchers.filter(v=>v.type==='receipt').reduce((s,v)=>s+v.amount,0)
       + electronic.filter(e=>e.type==='incoming').reduce((s,e)=>s+e.netAmount,0);
     const totalExpense = vouchers.filter(v=>v.type==='payment').reduce((s,v)=>s+v.amount,0)
@@ -107,10 +113,16 @@ export const Dashboard: React.FC = () => {
   }, [workOrders, inventoryItems, invoices, vouchers, electronic, cheques, purchases, imports]);
 
   const recentWorkOrders = [...workOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6);
-  const recentActivity   = [...activity].sort((a,b)=>b.timestamp.localeCompare(a.timestamp)).slice(0, 8);
+  const allActivity      = [...activity].sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
+  const recentActivity   = canSeeFinance
+    ? allActivity.slice(0, 8)
+    : allActivity.filter(a => a.type !== 'finance' && a.type !== 'invoice').slice(0, 8);
   const upcomingCheques  = cheques.filter(c=>c.status==='pending').sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).slice(0,4);
 
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'مدير النظام';
+
+  // Show operational section only if at least one item is visible
+  const showOpsSection = canSeePurchases || canSeeImports || canSeeFinance;
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="space-y-6">
@@ -132,7 +144,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="text-left hidden sm:block">
             <p className="text-xs text-gray-500">{new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            {stats.dueCheques.length > 0 && (
+            {canSeeFinance && stats.dueCheques.length > 0 && (
               <div className="flex items-center gap-1.5 mt-2 text-xs text-red-400 font-semibold">
                 <AlertTriangle size={12} />
                 <span>{stats.dueCheques.length} شيك مستحق خلال 7 أيام</span>
@@ -148,7 +160,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Production KPIs */}
+      {/* Production KPIs — visible to all */}
       <motion.div variants={fadeUp}>
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-3">الإنتاج</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -159,33 +171,45 @@ export const Dashboard: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Finance KPIs */}
-      <motion.div variants={fadeUp}>
-        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-3">الماليات</p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="إجمالي الدخل"    value={formatCurrency(stats.totalIncome)}  icon={<TrendingUp size={22}/>}    color="emerald" />
-          <StatCard title="إجمالي الصرف"    value={formatCurrency(stats.totalExpense)} icon={<TrendingDown size={22}/>}  color="red" />
-          <StatCard title="شيكات معلقة"     value={stats.pendingCheques.length}        icon={<CheckSquare size={22}/>}   color="amber"  subtitle={formatCurrency(stats.pendingCheques.reduce((s,c)=>s+c.amount,0))} />
-          <StatCard title="مستحقات عملاء"   value={formatCurrency(stats.invoiceRemaining)} icon={<Wallet size={22}/>}   color="gold"   subtitle="غير محصّل" />
-        </div>
-      </motion.div>
+      {/* Finance KPIs — full_admin and finance_user only */}
+      {canSeeFinance && (
+        <motion.div variants={fadeUp}>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-3">الماليات</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard title="إجمالي الدخل"    value={formatCurrency(stats.totalIncome)}  icon={<TrendingUp size={22}/>}    color="emerald" />
+            <StatCard title="إجمالي الصرف"    value={formatCurrency(stats.totalExpense)} icon={<TrendingDown size={22}/>}  color="red" />
+            <StatCard title="شيكات معلقة"     value={stats.pendingCheques.length}        icon={<CheckSquare size={22}/>}   color="amber"  subtitle={formatCurrency(stats.pendingCheques.reduce((s,c)=>s+c.amount,0))} />
+            <StatCard title="مستحقات عملاء"   value={formatCurrency(stats.invoiceRemaining)} icon={<Wallet size={22}/>}   color="gold"   subtitle="غير محصّل" />
+          </div>
+        </motion.div>
+      )}
 
-      {/* Operations KPIs */}
-      <motion.div variants={fadeUp}>
-        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-3">العمليات</p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="العملاء"         value={customers.length}                        icon={<Users size={22}/>}        color="blue"   />
-          <StatCard title="المشتريات"        value={formatCurrency(purchases.reduce((s,p)=>s+p.finalCost,0))} icon={<ShoppingCart size={22}/>} color="amber" subtitle={`${purchases.length} فاتورة`} />
-          <StatCard title="شحنات في الطريق" value={stats.inTransit}                         icon={<Ship size={22}/>}         color="blue"   subtitle="استيراد نشط" />
-          <StatCard title="معاملات إلكترونية" value={electronic.length}                    icon={<Smartphone size={22}/>}   color="purple" />
-        </div>
-      </motion.div>
+      {/* Operations KPIs — filtered per role */}
+      {showOpsSection && (
+        <motion.div variants={fadeUp}>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-3">العمليات</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard title="العملاء" value={customers.length} icon={<Users size={22}/>} color="blue" />
+            {canSeePurchases && (
+              <StatCard title="المشتريات" value={formatCurrency(purchases.reduce((s,p)=>s+p.finalCost,0))} icon={<ShoppingCart size={22}/>} color="amber" subtitle={`${purchases.length} فاتورة`} />
+            )}
+            {canSeeImports && (
+              <StatCard title="شحنات في الطريق" value={stats.inTransit} icon={<Ship size={22}/>} color="blue" subtitle="استيراد نشط" />
+            )}
+            {canSeeFinance && (
+              <StatCard title="معاملات إلكترونية" value={electronic.length} icon={<Smartphone size={22}/>} color="purple" />
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* Charts Row */}
       <motion.div variants={fadeUp} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <Card className="lg:col-span-2" padding={false}>
           <div className="p-5 border-b border-dark-border flex items-center justify-between">
-            <h3 className="font-semibold text-white">الإنتاج والمبيعات الشهرية</h3>
+            <h3 className="font-semibold text-white">
+              {canSeeFinance ? 'الإنتاج والمبيعات الشهرية' : 'أوامر الشغل الشهرية'}
+            </h3>
             <Badge color="green">آخر 6 أشهر</Badge>
           </div>
           <div className="p-5">
@@ -206,7 +230,9 @@ export const Dashboard: React.FC = () => {
                 <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
                 <Area type="monotone" dataKey="أوامر الشغل" stroke="#3AAE5A" strokeWidth={2} fill="url(#gWO)" />
-                <Area type="monotone" dataKey="مبيعات"      stroke="#C9963F" strokeWidth={2} fill="url(#gSales)" />
+                {canSeeFinance && (
+                  <Area type="monotone" dataKey="مبيعات" stroke="#C9963F" strokeWidth={2} fill="url(#gSales)" />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -252,69 +278,75 @@ export const Dashboard: React.FC = () => {
         </Card>
       </motion.div>
 
-      {/* Inventory + Machines */}
-      <motion.div variants={fadeUp} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card padding={false}>
-          <div className="p-5 border-b border-dark-border flex items-center justify-between">
-            <h3 className="font-semibold text-white">ملخص المخزون</h3>
-            <Link to="/warehouse/weft" className="text-xs text-green-pale hover:underline flex items-center gap-1">عرض <ChevronLeft size={12}/></Link>
-          </div>
-          <div className="p-4">
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={stats.warehouseData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E3A22" />
-                <XAxis dataKey="name" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="value" name="الكمية (كيلو)" fill="#1B5E2A" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-            {stats.lowStock.length > 0 && (
-              <div className="mt-3 space-y-1.5">
-                <p className="text-xs text-amber-400 font-medium flex items-center gap-1"><AlertTriangle size={11}/>مخزون منخفض:</p>
-                {stats.lowStock.slice(0,3).map(item => (
-                  <div key={item.id} className="flex items-center justify-between py-1">
-                    <span className="text-xs text-gray-400">{item.name}</span>
-                    <Badge color="amber">{item.quantity} {item.unit}</Badge>
+      {/* Inventory + Machines — role gated */}
+      {(canSeeInventory || canSeeMachines) && (
+        <motion.div variants={fadeUp} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {canSeeInventory && (
+            <Card padding={false}>
+              <div className="p-5 border-b border-dark-border flex items-center justify-between">
+                <h3 className="font-semibold text-white">ملخص المخزون</h3>
+                <Link to="/warehouse/weft" className="text-xs text-green-pale hover:underline flex items-center gap-1">عرض <ChevronLeft size={12}/></Link>
+              </div>
+              <div className="p-4">
+                <ResponsiveContainer width="100%" height={140}>
+                  <BarChart data={stats.warehouseData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1E3A22" />
+                    <XAxis dataKey="name" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="value" name="الكمية (كيلو)" fill="#1B5E2A" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+                {stats.lowStock.length > 0 && (
+                  <div className="mt-3 space-y-1.5">
+                    <p className="text-xs text-amber-400 font-medium flex items-center gap-1"><AlertTriangle size={11}/>مخزون منخفض:</p>
+                    {stats.lowStock.slice(0,3).map(item => (
+                      <div key={item.id} className="flex items-center justify-between py-1">
+                        <span className="text-xs text-gray-400">{item.name}</span>
+                        <Badge color="amber">{item.quantity} {item.unit}</Badge>
+                      </div>
+                    ))}
                   </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {canSeeMachines && (
+            <Card padding={false}>
+              <div className="p-5 border-b border-dark-border flex items-center justify-between">
+                <h3 className="font-semibold text-white">حالة الماكينات</h3>
+                <Link to="/machines" className="text-xs text-green-pale hover:underline flex items-center gap-1">إدارة <ChevronLeft size={12}/></Link>
+              </div>
+              <div className="p-4 grid grid-cols-5 gap-2">
+                {stats.machines.map(m => (
+                  <Link key={m.number} to="/machines">
+                    <motion.div whileHover={{ scale: 1.05 }}
+                      className={`relative rounded-xl p-2 text-center cursor-pointer border
+                        ${m.status === 'active'
+                          ? 'bg-green/10 border-green/30'
+                          : 'bg-dark-raised border-dark-border'}`}>
+                      <div className={`w-7 h-7 rounded-lg mx-auto mb-1 flex items-center justify-center
+                        ${m.status === 'active' ? 'bg-green/20' : 'bg-dark-hover'}`}>
+                        <Factory size={14} className={m.status === 'active' ? 'text-green-pale' : 'text-gray-600'} />
+                      </div>
+                      <p className="text-xs font-bold text-white">{m.number}</p>
+                      <div className={`w-1.5 h-1.5 rounded-full mx-auto mt-1 ${m.status === 'active' ? 'bg-green-pale animate-pulse' : 'bg-gray-600'}`} />
+                    </motion.div>
+                  </Link>
                 ))}
               </div>
-            )}
-          </div>
-        </Card>
+              <div className="px-5 pb-4 flex items-center gap-4 mt-2">
+                <span className="flex items-center gap-1.5 text-xs text-gray-400"><div className="w-2 h-2 rounded-full bg-green-pale"/>نشطة ({stats.machines.filter(m=>m.status==='active').length})</span>
+                <span className="flex items-center gap-1.5 text-xs text-gray-400"><div className="w-2 h-2 rounded-full bg-gray-600"/>خاملة ({stats.machines.filter(m=>m.status==='idle').length})</span>
+              </div>
+            </Card>
+          )}
+        </motion.div>
+      )}
 
-        <Card padding={false}>
-          <div className="p-5 border-b border-dark-border flex items-center justify-between">
-            <h3 className="font-semibold text-white">حالة الماكينات</h3>
-            <Link to="/machines" className="text-xs text-green-pale hover:underline flex items-center gap-1">إدارة <ChevronLeft size={12}/></Link>
-          </div>
-          <div className="p-4 grid grid-cols-5 gap-2">
-            {stats.machines.map(m => (
-              <Link key={m.number} to="/machines">
-                <motion.div whileHover={{ scale: 1.05 }}
-                  className={`relative rounded-xl p-2 text-center cursor-pointer border
-                    ${m.status === 'active'
-                      ? 'bg-green/10 border-green/30'
-                      : 'bg-dark-raised border-dark-border'}`}>
-                  <div className={`w-7 h-7 rounded-lg mx-auto mb-1 flex items-center justify-center
-                    ${m.status === 'active' ? 'bg-green/20' : 'bg-dark-hover'}`}>
-                    <Factory size={14} className={m.status === 'active' ? 'text-green-pale' : 'text-gray-600'} />
-                  </div>
-                  <p className="text-xs font-bold text-white">{m.number}</p>
-                  <div className={`w-1.5 h-1.5 rounded-full mx-auto mt-1 ${m.status === 'active' ? 'bg-green-pale animate-pulse' : 'bg-gray-600'}`} />
-                </motion.div>
-              </Link>
-            ))}
-          </div>
-          <div className="px-5 pb-4 flex items-center gap-4 mt-2">
-            <span className="flex items-center gap-1.5 text-xs text-gray-400"><div className="w-2 h-2 rounded-full bg-green-pale"/>نشطة ({stats.machines.filter(m=>m.status==='active').length})</span>
-            <span className="flex items-center gap-1.5 text-xs text-gray-400"><div className="w-2 h-2 rounded-full bg-gray-600"/>خاملة ({stats.machines.filter(m=>m.status==='idle').length})</span>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Upcoming Cheques Alert */}
-      {upcomingCheques.length > 0 && (
+      {/* Upcoming Cheques — finance users only */}
+      {canSeeFinance && upcomingCheques.length > 0 && (
         <motion.div variants={fadeUp}>
           <Card padding={false}>
             <div className="p-4 border-b border-dark-border flex items-center justify-between">

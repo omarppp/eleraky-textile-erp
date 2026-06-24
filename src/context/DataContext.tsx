@@ -156,24 +156,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     readyCols.current = new Set<string>();
     const col = (name: string) => collection(db, name);
+    // err callback marks collection ready with empty data so loading resolves even if Firestore denies access
+    const err = (name: string) => () => markReady(name);
 
     const unsubs = [
-      onSnapshot(col('designs'),            s => { setDesigns(s.docs.map(d => fromSnap<Design>(d)));                       markReady('designs'); }),
-      onSnapshot(col('workOrders'),         s => { setWorkOrders(s.docs.map(d => fromSnap<WorkOrder>(d)));                 markReady('workOrders'); }),
-      onSnapshot(col('inventoryItems'),     s => { setInventoryItems(s.docs.map(d => fromSnap<InventoryItem>(d)));         markReady('inventoryItems'); }),
-      onSnapshot(col('inventoryMovements'), s => { setInventoryMovements(s.docs.map(d => fromSnap<InventoryMovement>(d))); markReady('inventoryMovements'); }),
-      onSnapshot(col('invoices'),           s => { setInvoices(s.docs.map(d => fromSnap<Invoice>(d)));                     markReady('invoices'); }),
-      onSnapshot(col('activity'),           s => { setActivity(s.docs.map(d => fromSnap<ActivityItem>(d)));                markReady('activity'); }),
-      onSnapshot(col('customers'),          s => { setCustomers(s.docs.map(d => fromSnap<Customer>(d)));                   markReady('customers'); }),
-      onSnapshot(col('suppliers'),          s => { setSuppliers(s.docs.map(d => fromSnap<Supplier>(d)));                   markReady('suppliers'); }),
-      onSnapshot(col('purchases'),          s => { setPurchases(s.docs.map(d => fromSnap<Purchase>(d)));                   markReady('purchases'); }),
-      onSnapshot(col('imports'),            s => { setImports(s.docs.map(d => fromSnap<ImportShipment>(d)));               markReady('imports'); }),
-      onSnapshot(col('journal'),            s => { setJournal(s.docs.map(d => fromSnap<JournalEntry>(d)));                 markReady('journal'); }),
-      onSnapshot(col('vouchers'),           s => { setVouchers(s.docs.map(d => fromSnap<CashVoucher>(d)));                 markReady('vouchers'); }),
-      onSnapshot(col('cheques'),            s => { setCheques(s.docs.map(d => fromSnap<Cheque>(d)));                       markReady('cheques'); }),
-      onSnapshot(col('electronic'),         s => { setElectronic(s.docs.map(d => fromSnap<ElectronicTransaction>(d)));     markReady('electronic'); }),
-      onSnapshot(col('employees'),          s => { setEmployees(s.docs.map(d => fromSnap<Employee>(d)));                   markReady('employees'); }),
-      onSnapshot(col('fabricCostings'),     s => { setFabricCostings(s.docs.map(d => fromSnap<FabricCosting>(d)));         markReady('fabricCostings'); }),
+      onSnapshot(col('designs'),            s => { setDesigns(s.docs.map(d => fromSnap<Design>(d)));                       markReady('designs'); },            err('designs')),
+      onSnapshot(col('workOrders'),         s => { setWorkOrders(s.docs.map(d => fromSnap<WorkOrder>(d)));                 markReady('workOrders'); },         err('workOrders')),
+      onSnapshot(col('inventoryItems'),     s => { setInventoryItems(s.docs.map(d => fromSnap<InventoryItem>(d)));         markReady('inventoryItems'); },     err('inventoryItems')),
+      onSnapshot(col('inventoryMovements'), s => { setInventoryMovements(s.docs.map(d => fromSnap<InventoryMovement>(d))); markReady('inventoryMovements'); }, err('inventoryMovements')),
+      onSnapshot(col('invoices'),           s => { setInvoices(s.docs.map(d => fromSnap<Invoice>(d)));                     markReady('invoices'); },           err('invoices')),
+      onSnapshot(col('activity'),           s => { setActivity(s.docs.map(d => fromSnap<ActivityItem>(d)));                markReady('activity'); },           err('activity')),
+      onSnapshot(col('customers'),          s => { setCustomers(s.docs.map(d => fromSnap<Customer>(d)));                   markReady('customers'); },          err('customers')),
+      onSnapshot(col('suppliers'),          s => { setSuppliers(s.docs.map(d => fromSnap<Supplier>(d)));                   markReady('suppliers'); },          err('suppliers')),
+      onSnapshot(col('purchases'),          s => { setPurchases(s.docs.map(d => fromSnap<Purchase>(d)));                   markReady('purchases'); },          err('purchases')),
+      onSnapshot(col('imports'),            s => { setImports(s.docs.map(d => fromSnap<ImportShipment>(d)));               markReady('imports'); },            err('imports')),
+      onSnapshot(col('journal'),            s => { setJournal(s.docs.map(d => fromSnap<JournalEntry>(d)));                 markReady('journal'); },            err('journal')),
+      onSnapshot(col('vouchers'),           s => { setVouchers(s.docs.map(d => fromSnap<CashVoucher>(d)));                 markReady('vouchers'); },           err('vouchers')),
+      onSnapshot(col('cheques'),            s => { setCheques(s.docs.map(d => fromSnap<Cheque>(d)));                       markReady('cheques'); },            err('cheques')),
+      onSnapshot(col('electronic'),         s => { setElectronic(s.docs.map(d => fromSnap<ElectronicTransaction>(d)));     markReady('electronic'); },         err('electronic')),
+      onSnapshot(col('employees'),          s => { setEmployees(s.docs.map(d => fromSnap<Employee>(d)));                   markReady('employees'); },          err('employees')),
+      onSnapshot(col('fabricCostings'),     s => { setFabricCostings(s.docs.map(d => fromSnap<FabricCosting>(d)));         markReady('fabricCostings'); },     err('fabricCostings')),
     ];
 
     return () => unsubs.forEach(u => u());

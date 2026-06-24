@@ -110,7 +110,8 @@ export const paymentMethodLabel: Record<PaymentMethod, string> = {
 // ---- Role ----
 export const roleLabel: Record<UserRole, string> = {
   full_admin:      'مدير النظام الكامل',
-  operations_user: 'عمليات / مبيعات',
+  operations_user: 'تشغيل',
+  marketing_user:  'ماركتينج / مبيعات',
   finance_user:    'مالية',
 };
 

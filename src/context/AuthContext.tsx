@@ -8,15 +8,6 @@ import { canAccessModule } from '../lib/permissions';
 
 const ADMIN_EMAIL = 'refaateleraky7@gmail.com';
 
-// Kept for backward compat with legacy Users.tsx page
-export function setRoleForEmail(email: string, role: UserRole) {
-  try {
-    const stored = JSON.parse(localStorage.getItem('eleraky_user_roles') || '{}');
-    stored[email] = role;
-    localStorage.setItem('eleraky_user_roles', JSON.stringify(stored));
-  } catch { /* noop */ }
-}
-
 interface AuthContextType {
   user:              User | null;
   userProfile:       UserProfile | null;
@@ -27,7 +18,7 @@ interface AuthContextType {
   logout:            () => Promise<void>;
   canAccess:         (section: string) => boolean;
   hasPermission:     (module: PermissionModule, action?: PermissionAction) => boolean;
-  updateUserProfile: (emailKey: string, data: Partial<UserProfile>) => Promise<void>;
+  updateUserProfile: (uid: string, data: Partial<UserProfile>) => Promise<void>;
   clearError:        () => void;
 }
 
@@ -46,9 +37,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadProfile = useCallback(async (u: User) => {
     setProfDone(false);
     try {
-      const key = (u.email ?? '').toLowerCase();
-      const ref = doc(db, 'users', key);
-      const snap = await getDoc(ref);
+      const emailKey = (u.email ?? '').toLowerCase();
+      const uidRef   = doc(db, 'users', u.uid);
+      const emailRef = doc(db, 'users', emailKey);
+
+      // Try uid-keyed doc first (new style); fall back to email-keyed (legacy)
+      let snap = await getDoc(uidRef);
+      if (!snap.exists()) {
+        const emailSnap = await getDoc(emailRef);
+        if (emailSnap.exists()) {
+          // Migrate legacy doc to uid-keyed
+          const legacyData = emailSnap.data() as UserProfile;
+          await setDoc(uidRef, { ...legacyData, uid: u.uid });
+          snap = await getDoc(uidRef);
+        }
+      }
 
       if (snap.exists()) {
         const profile = snap.data() as UserProfile;
@@ -63,17 +66,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
         const updated: UserProfile = { ...profile, uid: u.uid, lastLoginAt: new Date().toISOString() };
-        setDoc(ref, { uid: u.uid, lastLoginAt: updated.lastLoginAt }, { merge: true }).catch(() => {});
+        setDoc(uidRef, { uid: u.uid, lastLoginAt: updated.lastLoginAt }, { merge: true }).catch(() => {});
         setUserProfile(updated);
         setRole(updated.role);
-      } else if (key === ADMIN_EMAIL) {
+      } else if (emailKey === ADMIN_EMAIL) {
+        // Auto-create admin profile on first login
         const adminProfile: UserProfile = {
-          uid: u.uid, email: key, displayName: 'رفعت العراقي',
+          uid: u.uid, email: emailKey, displayName: 'رفعت العراقي',
           role: 'full_admin', status: 'active',
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
         };
-        await setDoc(ref, adminProfile);
+        await setDoc(uidRef, adminProfile);
         setUserProfile(adminProfile);
         setRole('full_admin');
       } else {
@@ -82,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.error('[AuthContext] loadProfile error:', err);
-      const fallbackRole: UserRole = u.email === ADMIN_EMAIL ? 'full_admin' : 'operations_user';
+      const fallbackRole: UserRole = (u.email ?? '') === ADMIN_EMAIL ? 'full_admin' : 'operations_user';
       setUserProfile({
         uid: u.uid, email: u.email ?? '', displayName: u.email ?? '',
         role: fallbackRole, status: 'active',
@@ -135,14 +139,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   }, [userProfile]);
 
-  const updateUserProfile = useCallback(async (emailKey: string, data: Partial<UserProfile>) => {
-    const ref = doc(db, 'users', emailKey.toLowerCase());
+  const updateUserProfile = useCallback(async (uid: string, data: Partial<UserProfile>) => {
+    const ref = doc(db, 'users', uid);
     await setDoc(ref, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
-    if (emailKey.toLowerCase() === user?.email?.toLowerCase()) {
+    if (uid === user?.uid) {
       setUserProfile(prev => prev ? { ...prev, ...data } : null);
       if (data.role) setRole(data.role);
     }
-  }, [user?.email]);
+  }, [user?.uid]);
 
   const login = async (email: string, password: string) => {
     setError(null);

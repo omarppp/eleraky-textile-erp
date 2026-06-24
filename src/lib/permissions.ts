@@ -1,6 +1,5 @@
 import type { UserRole, PermissionModule } from '../types';
 
-// Fixed module access per role — no custom permissions
 export const ROLE_MODULES: Record<UserRole, PermissionModule[]> = {
   full_admin: [
     'dashboard', 'designs', 'workOrders', 'customers', 'employees',
@@ -8,14 +7,18 @@ export const ROLE_MODULES: Record<UserRole, PermissionModule[]> = {
     'invoices', 'reports', 'machines', 'settings', 'accessManagement',
     'activityLogs', 'dataSetup',
   ],
+  // Tashgheel — production & operational, NO financial data
   operations_user: [
-    'dashboard', 'designs', 'workOrders', 'customers', 'employees',
-    'inventory', 'purchases', 'fabricCosting', 'import',
-    'invoices', 'reports', 'machines',
+    'dashboard', 'designs', 'workOrders', 'customers',
+    'employees', 'inventory', 'machines',
   ],
+  // Marketing & Sales — customer-facing, NO financial data
+  marketing_user: [
+    'dashboard', 'designs', 'workOrders', 'customers',
+  ],
+  // Finance — financial modules only
   finance_user: [
-    'dashboard', 'finance', 'invoices', 'customers',
-    'fabricCosting', 'import', 'reports', 'activityLogs',
+    'dashboard', 'finance', 'invoices', 'reports', 'customers',
   ],
 };
 
@@ -25,13 +28,15 @@ export function canAccessModule(role: UserRole, module: PermissionModule): boole
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   full_admin:      'مدير النظام الكامل',
-  operations_user: 'عمليات / مبيعات',
+  operations_user: 'تشغيل',
+  marketing_user:  'ماركتينج / مبيعات',
   finance_user:    'مالية',
 };
 
 export const ROLE_COLORS: Record<UserRole, string> = {
   full_admin:      'bg-green/15 text-green-pale border border-green/30',
   operations_user: 'bg-blue-500/15 text-blue-400 border border-blue-500/30',
+  marketing_user:  'bg-purple-500/15 text-purple-400 border border-purple-500/30',
   finance_user:    'bg-amber-500/15 text-amber-400 border border-amber-500/30',
 };
 

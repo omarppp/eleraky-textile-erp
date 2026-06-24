@@ -2,7 +2,7 @@
 export type Timestamp = Date | string;
 
 // ===================== USER ROLES =====================
-export type UserRole = 'full_admin' | 'operations_user' | 'finance_user';
+export type UserRole = 'full_admin' | 'operations_user' | 'finance_user' | 'marketing_user';
 
 export interface SystemUser {
   id: string;
@@ -38,6 +38,12 @@ export type WorkOrderStatus =
   | 'new' | 'in_production' | 'waiting'
   | 'completed' | 'delivered' | 'delayed' | 'cancelled';
 
+export interface FingerOrderItem {
+  fingerNumber: string;
+  orderValue: string;
+  notes?: string;
+}
+
 export interface WorkOrder {
   id: string;
   orderNumber: string;
@@ -53,6 +59,7 @@ export interface WorkOrder {
   status: WorkOrderStatus;
   responsibleEmployeeId?: string;
   responsibleEmployeeName?: string;
+  fingerOrder?: FingerOrderItem[];
   notes?: string;
   createdAt: string;
   updatedAt: string;

@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -26,8 +26,18 @@ if (!isFirebaseConfigured) {
   );
 }
 
-const app     = initializeApp(firebaseConfig);
+const app        = initializeApp(firebaseConfig);
 export const auth    = getAuth(app);
 export const db      = getFirestore(app);
 export const storage = getStorage(app);
+
+// Secondary Firebase app — used for creating new auth accounts without
+// logging out the currently signed-in admin.
+export const getSecondaryAuth = () => {
+  const existing = getApps().find(a => a.name === 'secondary');
+  if (existing) return getAuth(existing);
+  const secondaryApp = initializeApp(firebaseConfig, 'secondary');
+  return getAuth(secondaryApp);
+};
+
 export default app;

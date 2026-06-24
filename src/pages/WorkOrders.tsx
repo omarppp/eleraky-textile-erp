@@ -1,12 +1,12 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Eye, ClipboardList, X } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import { Plus, Pencil, Trash2, Eye, ClipboardList, X, Printer } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import {
   Button, Card, Badge, Modal, Input, Select, Textarea,
   ConfirmDialog, SearchInput, SectionHeader, Table,
   ProgressBar, Tabs, useToast,
 } from '../components/ui';
-import type { WorkOrder, WorkOrderStatus } from '../types';
+import type { WorkOrder, WorkOrderStatus, FingerOrderItem, Design } from '../types';
 import { formatDate, workOrderStatusBadge, workOrderStatusLabel, formatDateInput } from '../lib/utils';
 
 const MACHINE_OPTIONS = Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: `ماكينة ${i + 1}` }));
@@ -20,6 +20,124 @@ const STATUS_OPTIONS: { value: WorkOrderStatus; label: string }[] = [
   { value: 'cancelled',     label: 'ملغي' },
 ];
 
+const emptyFinger = (): FingerOrderItem => ({ fingerNumber: '', orderValue: '', notes: '' });
+
+const getDesignWefts = (d: Design) => {
+  if (d.wefts && d.wefts.length > 0) return d.wefts;
+  if (d.weft) return [{ name: d.weft }];
+  return [];
+};
+
+const PrintableWorkOrder = React.forwardRef<HTMLDivElement, { wo: WorkOrder; design?: Design | null }>(
+  ({ wo, design }, ref) => {
+    const wefts = design ? getDesignWefts(design) : [];
+    return (
+      <div ref={ref} dir="rtl" style={{ fontFamily: 'Cairo, sans-serif', padding: 32, color: '#111', background: '#fff', minHeight: '100%' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24, borderBottom: '2px solid #C9963F', paddingBottom: 16 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: '#1B5E2A', margin: 0, letterSpacing: 1 }}>Eleraky Textile</h1>
+            <p style={{ fontSize: 11, color: '#888', margin: '4px 0 0', letterSpacing: 2 }}>FACTORY MANAGEMENT</p>
+          </div>
+          <div style={{ textAlign: 'left' }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>أمر شغل</h2>
+            <p style={{ fontSize: 14, color: '#C9963F', fontWeight: 600, margin: '4px 0 0' }}>{wo.orderNumber}</p>
+          </div>
+        </div>
+
+        {/* Status */}
+        <div style={{ marginBottom: 16 }}>
+          <span style={{ background: '#f0f7f0', border: '1px solid #1B5E2A', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 700, color: '#1B5E2A' }}>
+            {workOrderStatusLabel[wo.status]}
+          </span>
+        </div>
+
+        {/* Details Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+          {[
+            { label: 'العميل',                value: wo.customerName },
+            { label: 'الصنف',                 value: wo.item },
+            { label: 'رقم التصميم',           value: wo.designNumber || '—' },
+            { label: 'رقم الماكينة',          value: `ماكينة ${wo.machineNumber}` },
+            { label: 'الكمية المطلوبة',        value: `${wo.quantity} متر` },
+            { label: 'الكمية المنتجة',         value: `${wo.producedQuantity} متر` },
+            { label: 'تاريخ التسليم المتوقع',  value: formatDate(wo.expectedDelivery) },
+            { label: 'الموظف المسؤول',         value: wo.responsibleEmployeeName || '—' },
+          ].map(r => (
+            <div key={r.label} style={{ background: '#f9f9f9', padding: '8px 12px', borderRadius: 6 }}>
+              <p style={{ fontSize: 10, color: '#888', margin: '0 0 2px' }}>{r.label}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{r.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Wefts Table */}
+        {wefts.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#C9963F', borderBottom: '1px solid #eee', paddingBottom: 6, marginBottom: 8 }}>اللحمات</p>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f5f5f5' }}>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: 11, fontWeight: 600, border: '1px solid #eee' }}>#</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: 11, fontWeight: 600, border: '1px solid #eee' }}>نوع اللحمة</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: 11, fontWeight: 600, border: '1px solid #eee' }}>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {wefts.map((w, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '6px 10px', fontSize: 12, border: '1px solid #eee' }}>اللحمة {i + 1}</td>
+                    <td style={{ padding: '6px 10px', fontSize: 12, border: '1px solid #eee' }}>{w.name}</td>
+                    <td style={{ padding: '6px 10px', fontSize: 12, color: '#888', border: '1px solid #eee' }}>{w.notes || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Finger Order Table */}
+        {wo.fingerOrder && wo.fingerOrder.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#1B5E2A', borderBottom: '1px solid #eee', paddingBottom: 6, marginBottom: 8 }}>ترتيب الصوابع</p>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f5f5f5' }}>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: 11, fontWeight: 600, border: '1px solid #eee' }}>رقم الصابع</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: 11, fontWeight: 600, border: '1px solid #eee' }}>الترتيب</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: 11, fontWeight: 600, border: '1px solid #eee' }}>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {wo.fingerOrder.map((fi, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '6px 10px', fontSize: 12, border: '1px solid #eee' }}>{fi.fingerNumber || `صابع ${i + 1}`}</td>
+                    <td style={{ padding: '6px 10px', fontSize: 12, border: '1px solid #eee' }}>{fi.orderValue}</td>
+                    <td style={{ padding: '6px 10px', fontSize: 12, color: '#888', border: '1px solid #eee' }}>{fi.notes || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Notes */}
+        {wo.notes && (
+          <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>
+            <p style={{ fontSize: 11, color: '#888', margin: '0 0 4px' }}>ملاحظات</p>
+            <p style={{ fontSize: 13, margin: 0 }}>{wo.notes}</p>
+          </div>
+        )}
+
+        <div style={{ marginTop: 32, textAlign: 'center', color: '#aaa', fontSize: 11 }}>
+          Eleraky Textile — Threads That Inspire, Fabrics That Last
+        </div>
+      </div>
+    );
+  }
+);
+PrintableWorkOrder.displayName = 'PrintableWorkOrder';
+
 const emptyForm = () => ({
   customerName: '', designId: '', designNumber: '', item: '',
   quantity: 1, producedQuantity: 0,
@@ -27,11 +145,13 @@ const emptyForm = () => ({
   status: 'new' as WorkOrderStatus,
   responsibleEmployeeId: '', responsibleEmployeeName: '',
   notes: '',
+  fingerOrder: [] as FingerOrderItem[],
 });
 
 export const WorkOrders: React.FC = () => {
   const { workOrders, designs, employees, addWorkOrder, updateWorkOrder, deleteWorkOrder } = useData();
   const { toast } = useToast();
+  const printRef = useRef<HTMLDivElement>(null);
 
   const [search,     setSearch]     = useState('');
   const [statusF,    setStatusF]    = useState('');
@@ -85,15 +205,21 @@ export const WorkOrders: React.FC = () => {
       responsibleEmployeeId: w.responsibleEmployeeId || '',
       responsibleEmployeeName: w.responsibleEmployeeName || '',
       notes: w.notes || '',
+      fingerOrder: w.fingerOrder ? [...w.fingerOrder] : [],
     });
     setErrors({}); setModalOpen(true);
   };
 
+  const addFinger = () => setForm(p => ({ ...p, fingerOrder: [...p.fingerOrder, emptyFinger()] }));
+  const removeFinger = (idx: number) => setForm(p => ({ ...p, fingerOrder: p.fingerOrder.filter((_, i) => i !== idx) }));
+  const updateFinger = (idx: number, field: keyof FingerOrderItem, value: string) =>
+    setForm(p => ({ ...p, fingerOrder: p.fingerOrder.map((fi, i) => i === idx ? { ...fi, [field]: value } : fi) }));
+
   const validate = () => {
     const e: Partial<Record<string, string>> = {};
-    if (!form.customerName.trim())  e.customerName  = 'اسم العميل مطلوب';
-    if (!form.item.trim())          e.item          = 'الصنف مطلوب';
-    if (form.quantity < 1)          e.quantity      = 'الكمية يجب أن تكون أكبر من صفر';
+    if (!form.customerName.trim())  e.customerName     = 'اسم العميل مطلوب';
+    if (!form.item.trim())          e.item             = 'الصنف مطلوب';
+    if (form.quantity < 1)          e.quantity         = 'الكمية يجب أن تكون أكبر من صفر';
     if (!form.expectedDelivery)     e.expectedDelivery = 'تاريخ التسليم مطلوب';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -103,8 +229,10 @@ export const WorkOrders: React.FC = () => {
     if (!validate()) return;
     setLoading(true);
     try {
+      const cleanedFingerOrder = form.fingerOrder.filter(fi => fi.fingerNumber.trim() || fi.orderValue.trim());
       const payload = {
         ...form,
+        fingerOrder: cleanedFingerOrder,
         designNumber: designs.find(d => d.id === form.designId)?.designNumber || form.designNumber,
       };
       if (editing && selected) {
@@ -129,6 +257,22 @@ export const WorkOrders: React.FC = () => {
       setDeleteOpen(false); setSelected(null);
     } catch { toast('حدث خطأ أثناء الحذف', 'error'); }
     finally { setLoading(false); }
+  };
+
+  const handlePrintWO = () => {
+    if (!printRef.current) return;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(`
+      <html><head>
+        <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+        <title>أمر شغل ${selected?.orderNumber}</title>
+        <style>body{margin:0;padding:20px;direction:rtl;}</style>
+      </head><body>${printRef.current.innerHTML}</body></html>
+    `);
+    win.document.close();
+    win.onload = () => { win.print(); win.close(); };
   };
 
   const columns = [
@@ -257,6 +401,7 @@ export const WorkOrders: React.FC = () => {
           <Select label="التصميم" value={form.designId}
             onChange={e => setForm(p => ({ ...p, designId: e.target.value }))}
             options={designOptions} placeholder="اختر تصميماً" />
+
           {/* Design wefts preview */}
           {form.designId && (() => {
             const d = designs.find(x => x.id === form.designId);
@@ -285,6 +430,7 @@ export const WorkOrders: React.FC = () => {
               </div>
             );
           })()}
+
           <Input label="الصنف *" value={form.item}
             onChange={e => setForm(p => ({ ...p, item: e.target.value }))}
             placeholder="نوع القماش / الصنف" error={errors.item} />
@@ -318,6 +464,47 @@ export const WorkOrders: React.FC = () => {
               ...activeEmployees.map(e => ({ value: e.id, label: `${e.name} — ${e.jobTitle}` })),
             ]}
           />
+
+          {/* Finger Order Section */}
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-gray-300">ترتيب الصوابع</p>
+              <Button size="sm" variant="ghost" icon={<Plus size={14} />} onClick={addFinger}>
+                إضافة صابع
+              </Button>
+            </div>
+            {form.fingerOrder.length === 0 ? (
+              <div className="text-center py-3 text-gray-600 text-xs bg-dark-raised border border-dashed border-dark-border rounded-xl">
+                لا يوجد ترتيب صوابع — اضغط "إضافة صابع" للإضافة
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {form.fingerOrder.map((fi, i) => (
+                  <div key={i} className="bg-dark-raised border border-dark-border rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-400 font-medium">صابع {i + 1}</span>
+                      <button onClick={() => removeFinger(i)}
+                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-red-400 transition-colors">
+                        <Trash2 size={12} /> حذف
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Input label="رقم الصابع" value={fi.fingerNumber}
+                        onChange={e => updateFinger(i, 'fingerNumber', e.target.value)}
+                        placeholder="مثال: 1" />
+                      <Input label="الترتيب / القيمة" value={fi.orderValue}
+                        onChange={e => updateFinger(i, 'orderValue', e.target.value)}
+                        placeholder="مثال: A أو 2" />
+                      <Input label="ملاحظات" value={fi.notes || ''}
+                        onChange={e => updateFinger(i, 'notes', e.target.value)}
+                        placeholder="اختياري" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="sm:col-span-2">
             <Textarea label="ملاحظات" value={form.notes}
               onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
@@ -328,7 +515,17 @@ export const WorkOrders: React.FC = () => {
       {/* Detail Modal */}
       {selected && detailOpen && (
         <Modal open={detailOpen} onClose={() => setDetailOpen(false)}
-          title={`أمر شغل ${selected.orderNumber}`} size="lg">
+          title={`أمر شغل ${selected.orderNumber}`} size="lg"
+          footer={
+            <div className="flex gap-2">
+              <Button variant="ghost" icon={<Printer size={14} />} onClick={handlePrintWO}>طباعة</Button>
+              <Button variant="outline" icon={<Pencil size={14} />}
+                onClick={() => { setDetailOpen(false); openEdit(selected); }}>تعديل</Button>
+              <Button variant="danger" icon={<Trash2 size={14} />}
+                onClick={() => { setDetailOpen(false); setDeleteOpen(true); }}>حذف</Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               {[
@@ -348,6 +545,8 @@ export const WorkOrders: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Progress */}
             <div className="bg-dark-raised border border-dark-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm text-gray-400">تقدم الإنتاج</p>
@@ -359,7 +558,8 @@ export const WorkOrders: React.FC = () => {
                 <span>{selected.quantity} متر مطلوب</span>
               </div>
             </div>
-            {/* Design wefts detail */}
+
+            {/* Design wefts */}
             {selected.designId && (() => {
               const d = designs.find(x => x.id === selected.designId);
               if (!d) return null;
@@ -384,21 +584,47 @@ export const WorkOrders: React.FC = () => {
               );
             })()}
 
+            {/* Finger Order */}
+            <div className="bg-dark-raised border border-dark-border rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-dark-border/50">
+                <span className="text-xs font-semibold text-blue-400 uppercase tracking-widest">ترتيب الصوابع</span>
+              </div>
+              {selected.fingerOrder && selected.fingerOrder.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-x-reverse divide-dark-border/40">
+                  {selected.fingerOrder.map((fi, i) => (
+                    <div key={i} className="px-4 py-3">
+                      <p className="text-xs text-gray-500 mb-1">صابع {i + 1}</p>
+                      <p className="text-sm font-semibold text-white">{fi.fingerNumber || '—'}</p>
+                      <p className="text-xs text-blue-400 font-medium">{fi.orderValue}</p>
+                      {fi.notes && <p className="text-xs text-gray-500 mt-0.5">{fi.notes}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-4 py-3 text-sm text-gray-500">لا يوجد ترتيب صوابع مسجل</div>
+              )}
+            </div>
+
             {selected.notes && (
               <div className="bg-dark-raised border border-dark-border rounded-xl p-3">
                 <p className="text-xs text-gray-500 mb-1">ملاحظات</p>
                 <p className="text-sm text-gray-300">{selected.notes}</p>
               </div>
             )}
-            <div className="flex gap-2">
-              <Button variant="outline" icon={<Pencil size={14} />}
-                onClick={() => { setDetailOpen(false); openEdit(selected); }}>تعديل</Button>
-              <Button variant="danger" icon={<Trash2 size={14} />}
-                onClick={() => { setDetailOpen(false); setDeleteOpen(true); }}>حذف</Button>
-            </div>
           </div>
         </Modal>
       )}
+
+      {/* Hidden print target */}
+      <div className="hidden">
+        {selected && (
+          <PrintableWorkOrder
+            ref={printRef}
+            wo={selected}
+            design={designs.find(d => d.id === selected.designId) ?? null}
+          />
+        )}
+      </div>
 
       <ConfirmDialog
         open={deleteOpen} onClose={() => setDeleteOpen(false)}

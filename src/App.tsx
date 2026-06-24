@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './components/ui';
+import { AccessDenied } from './components/PermissionGate';
+import type { PermissionModule } from './types';
 import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -123,6 +125,15 @@ const Protected: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 // =====================================================================
+// ROUTE MODULE GUARD
+// =====================================================================
+const RequireModule: React.FC<{ module: PermissionModule; children: React.ReactNode }> = ({ module, children }) => {
+  const { hasPermission } = useAuth();
+  if (!hasPermission(module, 'view')) return <AccessDenied />;
+  return <>{children}</>;
+};
+
+// =====================================================================
 // ROUTES
 // =====================================================================
 function AppRoutes() {
@@ -144,32 +155,32 @@ function AppRoutes() {
 
         {/* Operations */}
         <Route path="/machines"                element={<Machines />} />
-        <Route path="/invoices"                element={<Invoices />} />
+        <Route path="/invoices"                element={<RequireModule module="invoices"><Invoices /></RequireModule>} />
         <Route path="/customers"               element={<Customers />} />
-        <Route path="/purchases"               element={<Purchases />} />
-        <Route path="/imports"                 element={<Imports />} />
+        <Route path="/purchases"               element={<RequireModule module="purchases"><Purchases /></RequireModule>} />
+        <Route path="/imports"                 element={<RequireModule module="import"><Imports /></RequireModule>} />
 
         {/* Finance */}
-        <Route path="/finance"                 element={<Finance />} />
-        <Route path="/finance/journal"         element={<Journal />} />
-        <Route path="/finance/vouchers"        element={<Vouchers />} />
-        <Route path="/finance/cheques"         element={<Cheques />} />
-        <Route path="/finance/electronic"      element={<Electronic />} />
-        <Route path="/finance/statement"       element={<AccountStatement />} />
+        <Route path="/finance"                 element={<RequireModule module="finance"><Finance /></RequireModule>} />
+        <Route path="/finance/journal"         element={<RequireModule module="finance"><Journal /></RequireModule>} />
+        <Route path="/finance/vouchers"        element={<RequireModule module="finance"><Vouchers /></RequireModule>} />
+        <Route path="/finance/cheques"         element={<RequireModule module="finance"><Cheques /></RequireModule>} />
+        <Route path="/finance/electronic"      element={<RequireModule module="finance"><Electronic /></RequireModule>} />
+        <Route path="/finance/statement"       element={<RequireModule module="finance"><AccountStatement /></RequireModule>} />
 
         {/* Employees & Costing */}
         <Route path="/employees"               element={<Employees />} />
-        <Route path="/costing/fabric"          element={<FabricCosting />} />
+        <Route path="/costing/fabric"          element={<RequireModule module="fabricCosting"><FabricCosting /></RequireModule>} />
 
         {/* Reports */}
-        <Route path="/reports"                 element={<Reports />} />
+        <Route path="/reports"                 element={<RequireModule module="reports"><Reports /></RequireModule>} />
 
         {/* Settings */}
-        <Route path="/settings"                element={<SystemSettingsPage />} />
-        <Route path="/settings/users"          element={<Users />} />
-        <Route path="/settings/access"         element={<AccessManagement />} />
-        <Route path="/settings/logs"           element={<ActivityLogs />} />
-        <Route path="/settings/data-setup"     element={<DataSetup />} />
+        <Route path="/settings"                element={<RequireModule module="settings"><SystemSettingsPage /></RequireModule>} />
+        <Route path="/settings/users"          element={<RequireModule module="settings"><Users /></RequireModule>} />
+        <Route path="/settings/access"         element={<RequireModule module="accessManagement"><AccessManagement /></RequireModule>} />
+        <Route path="/settings/logs"           element={<RequireModule module="activityLogs"><ActivityLogs /></RequireModule>} />
+        <Route path="/settings/data-setup"     element={<RequireModule module="dataSetup"><DataSetup /></RequireModule>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
