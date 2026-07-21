@@ -1,11 +1,16 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { Plus, Pencil, Trash2, Eye, FileText, Printer, X, PlusCircle, MinusCircle } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Plus, Pencil, Trash2, Eye, FileText, Printer, X, PlusCircle, MinusCircle, ClipboardCheck, ReceiptText } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
+import { canViewFinance } from '../lib/permissions';
+import { handlePrintInvoice } from '../lib/print';
+import { InvoicePrintTemplate } from '../components/InvoicePrintTemplate';
 import {
-  Button, Card, Badge, Modal, Input, Textarea,
-  ConfirmDialog, SearchInput, SectionHeader, Table, useToast,
+  Button, Card, Modal, Input, Textarea,
+  ConfirmDialog, SearchInput, SectionHeader, Table, Tabs, useToast,
 } from '../components/ui';
-import type { Invoice, InvoiceItem } from '../types';
+import type { Invoice, InvoiceItem, WorkOrder } from '../types';
 import { formatDate, formatCurrency, generateId } from '../lib/utils';
 
 const emptyItem = (): InvoiceItem => ({ id: generateId(), item: '', quantity: 1, price: 0, total: 0 });
@@ -14,81 +19,22 @@ const emptyForm = () => ({
   items: [emptyItem()],
   notes: '',
   date: new Date().toISOString().split('T')[0],
-  subtotal: 0, total: 0,
+  subtotal: 0, total: 0, paid: 0,
 });
 
-// Print-ready invoice component
-const PrintableInvoice = React.forwardRef<HTMLDivElement, { invoice: Invoice }>(({ invoice }, ref) => (
-  <div ref={ref} dir="rtl" style={{ fontFamily: 'Cairo, sans-serif', padding: 32, color: '#111', background: '#fff', minHeight: '100%' }}>
-    {/* Header */}
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 32, borderBottom: '2px solid #C9963F', paddingBottom: 16 }}>
-      <div>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: '#1B5E2A', margin: 0, letterSpacing: 1 }}>Eleraky Textile</h1>
-        <p style={{ fontSize: 11, color: '#888', margin: '4px 0 0', letterSpacing: 2 }}>FACTORY MANAGEMENT</p>
-      </div>
-      <div style={{ textAlign: 'left' }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>فاتورة</h2>
-        <p style={{ fontSize: 14, color: '#C9963F', fontWeight: 600, margin: '4px 0 0' }}>{invoice.invoiceNumber}</p>
-      </div>
-    </div>
-    {/* Customer info */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-      <div style={{ background: '#f9f9f9', padding: 12, borderRadius: 8 }}>
-        <p style={{ fontSize: 11, color: '#888', margin: '0 0 4px' }}>العميل</p>
-        <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{invoice.customerName}</p>
-        <p style={{ fontSize: 12, color: '#555', margin: '2px 0 0' }}>{invoice.phone}</p>
-        <p style={{ fontSize: 12, color: '#555', margin: '2px 0 0' }}>{invoice.address}</p>
-      </div>
-      <div style={{ background: '#f9f9f9', padding: 12, borderRadius: 8 }}>
-        <p style={{ fontSize: 11, color: '#888', margin: '0 0 4px' }}>تاريخ الفاتورة</p>
-        <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{formatDate(invoice.date)}</p>
-      </div>
-    </div>
-    {/* Table */}
-    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 24 }}>
-      <thead>
-        <tr style={{ background: '#C9963F', color: '#fff' }}>
-          <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>الصنف</th>
-          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>الكمية</th>
-          <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>السعر</th>
-          <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>الإجمالي</th>
-        </tr>
-      </thead>
-      <tbody>
-        {invoice.items.map((it, i) => (
-          <tr key={it.id} style={{ background: i % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-            <td style={{ padding: '9px 12px', fontSize: 13 }}>{it.item}</td>
-            <td style={{ padding: '9px 12px', textAlign: 'center', fontSize: 13 }}>{it.quantity}</td>
-            <td style={{ padding: '9px 12px', textAlign: 'center', fontSize: 13 }}>{it.price.toLocaleString('ar-EG')} ج.م</td>
-            <td style={{ padding: '9px 12px', textAlign: 'left', fontSize: 13, fontWeight: 600 }}>{it.total.toLocaleString('ar-EG')} ج.م</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-    {/* Total */}
-    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
-      <div style={{ background: '#C9963F', color: '#fff', padding: '12px 24px', borderRadius: 8, textAlign: 'center' }}>
-        <p style={{ fontSize: 12, margin: '0 0 4px', opacity: 0.8 }}>الإجمالي الكلي</p>
-        <p style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>{invoice.total.toLocaleString('ar-EG')} ج.م</p>
-      </div>
-    </div>
-    {invoice.notes && (
-      <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>
-        <p style={{ fontSize: 12, color: '#888', margin: '0 0 4px' }}>ملاحظات</p>
-        <p style={{ fontSize: 13, margin: 0 }}>{invoice.notes}</p>
-      </div>
-    )}
-    <div style={{ marginTop: 32, textAlign: 'center', color: '#aaa', fontSize: 11 }}>
-      Eleraky Textile — Threads That Inspire, Fabrics That Last
-    </div>
-  </div>
-));
+const getDesignPrice = (id: string | undefined, designs: { id: string; price?: number }[]): number => {
+  if (!id) return 0;
+  return designs.find(d => d.id === id)?.price ?? 0;
+};
 
 export const Invoices: React.FC = () => {
-  const { invoices, addInvoice, updateInvoice, deleteInvoice } = useData();
+  const { invoices, workOrders, designs, addInvoice, updateInvoice, deleteInvoice, updateWorkOrder } = useData();
+  const { role } = useAuth();
   const { toast } = useToast();
-  const printRef = useRef<HTMLDivElement>(null);
+  const canPrint = canViewFinance(role);
+  const [searchParams, setSearchParams] = useSearchParams();
 
+  const [activeTab,  setActiveTab]  = useState<'invoices' | 'pending'>('invoices');
   const [search,     setSearch]     = useState('');
   const [dateFrom,   setDateFrom]   = useState('');
   const [dateTo,     setDateTo]     = useState('');
@@ -99,10 +45,107 @@ export const Invoices: React.FC = () => {
   const [editing,    setEditing]    = useState(false);
   const [form,       setForm]       = useState(emptyForm());
   const [loading,    setLoading]    = useState(false);
+  const [creatingWoId, setCreatingWoId] = useState<string | null>(null);
+
+  // Work orders that need an invoice: completed/delivered, not yet invoiced
+  const pendingWorkOrders = useMemo(() => {
+    return workOrders
+      .filter(w => w.status === 'completed' || w.status === 'delivered')
+      .filter(w => w.invoiceStatus !== 'invoiced' && !w.invoiceId)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [workOrders]);
+
+  const createInvoiceFromWorkOrder = async (wo: WorkOrder) => {
+    if (wo.invoiceId || wo.invoiceStatus === 'invoiced') {
+      toast('تم إنشاء فاتورة لهذا الأمر بالفعل', 'warning');
+      return;
+    }
+    setCreatingWoId(wo.id);
+    try {
+      const design = designs.find(d => d.id === wo.designId);
+      const unitPrice = getDesignPrice(wo.designId, designs);
+      const total = wo.quantity * unitPrice;
+      const today = new Date().toISOString().split('T')[0];
+      const payload = {
+        customerName: wo.customerName,
+        phone: '',
+        address: '',
+        ...(wo.customerId ? { customerId: wo.customerId } : {}),
+        workOrderId: wo.id,
+        workOrderNumber: wo.orderNumber,
+        ...(wo.designId ? { designId: wo.designId } : {}),
+        designName: design?.designNumber || wo.designNumber || '',
+        item: wo.item,
+        quantity: wo.quantity,
+        unitPrice,
+        items: [{ id: generateId(), item: wo.item, quantity: wo.quantity, price: unitPrice, total }],
+        subtotal: total,
+        total,
+        paid: 0,
+        remaining: total,
+        status: 'unpaid' as const,
+        date: today,
+        notes: wo.notes || '',
+      };
+      const created = await addInvoice(payload);
+      await updateWorkOrder(wo.id, {
+        invoiceId: created.id,
+        invoiceNumber: created.invoiceNumber,
+        invoiceStatus: 'invoiced',
+        invoicedAt: new Date().toISOString(),
+      });
+      toast('تم إنشاء الفاتورة بنجاح', 'success');
+      setActiveTab('invoices');
+      // Open the newly created invoice immediately — the print button is right there
+      const now = new Date().toISOString();
+      setSelected({ id: created.id, invoiceNumber: created.invoiceNumber, ...payload, createdAt: now, updatedAt: now });
+      setViewOpen(true);
+    } catch {
+      toast('حدث خطأ أثناء إنشاء الفاتورة', 'error');
+    } finally {
+      setCreatingWoId(null);
+    }
+  };
+
+  // Deep links from Work Orders: ?workOrderId= auto-creates, ?invoiceId= opens the invoice
+  const handledParams = useRef(false);
+  useEffect(() => {
+    if (handledParams.current) return;
+    const woId = searchParams.get('workOrderId');
+    const invId = searchParams.get('invoiceId');
+    if (!woId && !invId) return;
+
+    if (invId) {
+      const inv = invoices.find(i => i.id === invId);
+      if (inv) {
+        handledParams.current = true;
+        setSelected(inv);
+        setViewOpen(true);
+        setActiveTab('invoices');
+        setSearchParams({}, { replace: true });
+      }
+      return;
+    }
+
+    if (woId) {
+      const wo = workOrders.find(w => w.id === woId);
+      if (!wo) return; // wait for data to load
+      handledParams.current = true;
+      setSearchParams({}, { replace: true });
+      if (wo.invoiceId || wo.invoiceStatus === 'invoiced') {
+        toast('تم إنشاء فاتورة لهذا الأمر بالفعل', 'warning');
+        setActiveTab('invoices');
+      } else {
+        setActiveTab('pending');
+        createInvoiceFromWorkOrder(wo);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workOrders, invoices, searchParams]);
 
   const filtered = useMemo(() => {
     let d = [...invoices].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    if (search)   d = d.filter(i => i.invoiceNumber.includes(search) || i.customerName.includes(search));
+    if (search)   d = d.filter(i => i.invoiceNumber.includes(search) || i.customerName.includes(search) || (i.workOrderNumber || '').includes(search));
     if (dateFrom) d = d.filter(i => new Date(i.date) >= new Date(dateFrom));
     if (dateTo)   d = d.filter(i => new Date(i.date) <= new Date(dateTo));
     return d;
@@ -136,7 +179,7 @@ export const Invoices: React.FC = () => {
     setEditing(true); setSelected(inv);
     setForm({ customerName: inv.customerName, phone: inv.phone, address: inv.address,
       items: inv.items, notes: inv.notes || '', date: inv.date.split('T')[0],
-      subtotal: inv.subtotal, total: inv.total });
+      subtotal: inv.subtotal, total: inv.total, paid: inv.paid ?? 0 });
     setModalOpen(true);
   };
 
@@ -145,11 +188,15 @@ export const Invoices: React.FC = () => {
     if (form.items.some(it => !it.item.trim())) { toast('اسم الصنف مطلوب لجميع البنود', 'warning'); return; }
     setLoading(true);
     try {
+      const paid = Math.max(0, form.paid);
+      const remaining = Math.max(0, form.total - paid);
+      const status = remaining === 0 && form.total > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
+      const payload = { ...form, paid, remaining, status } as typeof form & { remaining: number; status: 'paid' | 'partial' | 'unpaid' };
       if (editing && selected) {
-        await updateInvoice(selected.id, form);
+        await updateInvoice(selected.id, payload);
         toast('تم تحديث الفاتورة');
       } else {
-        await addInvoice(form);
+        await addInvoice(payload);
         toast('تمت إضافة الفاتورة');
       }
       setModalOpen(false);
@@ -168,25 +215,12 @@ export const Invoices: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  const handlePrint = () => {
-    if (!printRef.current) return;
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(`
-      <html><head>
-        <meta charset="UTF-8">
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
-        <title>فاتورة ${selected?.invoiceNumber}</title>
-        <style>body{margin:0;padding:20px;direction:rtl;}</style>
-      </head><body>${printRef.current.innerHTML}</body></html>
-    `);
-    win.document.close();
-    win.onload = () => { win.print(); win.close(); };
-  };
-
   const columns = [
     { key: 'invoiceNumber', title: 'رقم الفاتورة', render: (i: Invoice) => (
-      <span className="font-mono font-bold text-gold">{i.invoiceNumber}</span>
+      <div>
+        <span className="font-mono font-bold text-gold">{i.invoiceNumber}</span>
+        {i.workOrderNumber && <span className="text-xs text-gray-500 block">أمر {i.workOrderNumber}</span>}
+      </div>
     )},
     { key: 'customerName', title: 'العميل', render: (i: Invoice) => (
       <div><p className="font-medium text-white">{i.customerName}</p>
@@ -195,18 +229,29 @@ export const Invoices: React.FC = () => {
     { key: 'date', title: 'التاريخ', render: (i: Invoice) => (
       <span className="text-gray-400">{formatDate(i.date)}</span>
     )},
-    { key: 'items', title: 'عدد البنود', render: (i: Invoice) => (
-      <Badge color="blue">{i.items.length} بند</Badge>
-    )},
     { key: 'total', title: 'الإجمالي', render: (i: Invoice) => (
       <span className="font-bold text-emerald-400">{formatCurrency(i.total)}</span>
     )},
+    { key: 'paid', title: 'المدفوع', render: (i: Invoice) => (
+      <span className="text-blue-400">{formatCurrency(i.paid ?? 0)}</span>
+    )},
+    { key: 'remaining', title: 'المتبقي', render: (i: Invoice) => {
+      const remaining = i.remaining ?? (i.total - (i.paid ?? 0));
+      return <span className={remaining > 0 ? 'text-red-400 font-semibold' : 'text-gray-500'}>{formatCurrency(remaining)}</span>;
+    }},
     { key: 'actions', title: '', render: (i: Invoice) => (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
         <button onClick={() => { setSelected(i); setViewOpen(true); }}
           className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-all">
           <Eye size={14} />
         </button>
+        {canPrint && (
+          <button onClick={() => handlePrintInvoice(i, msg => toast(msg, 'error'))}
+            title="طباعة الفاتورة"
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gold hover:bg-gold/10 transition-all">
+            <Printer size={14} />
+          </button>
+        )}
         <button onClick={() => openEdit(i)}
           className="p-1.5 rounded-lg text-gray-500 hover:text-gold hover:bg-gold/10 transition-all">
           <Pencil size={14} />
@@ -219,41 +264,110 @@ export const Invoices: React.FC = () => {
     )},
   ];
 
+  const pendingColumns = [
+    { key: 'orderNumber', title: 'رقم الأمر', render: (w: WorkOrder) => (
+      <span className="font-mono font-bold text-gold">{w.orderNumber}</span>
+    )},
+    { key: 'customerName', title: 'العميل', render: (w: WorkOrder) => (
+      <span className="text-white font-medium">{w.customerName}</span>
+    )},
+    { key: 'design', title: 'التصميم', render: (w: WorkOrder) => (
+      <span className="text-gray-300">{w.designNumber || '—'}</span>
+    )},
+    { key: 'item', title: 'الصنف', render: (w: WorkOrder) => (
+      <span className="text-gray-300">{w.item}</span>
+    )},
+    { key: 'quantity', title: 'الكمية', render: (w: WorkOrder) => (
+      <span className="text-gray-300">{w.quantity}</span>
+    )},
+    { key: 'price', title: 'سعر التصميم', render: (w: WorkOrder) => (
+      <span className="text-gray-400">{formatCurrency(getDesignPrice(w.designId, designs))}</span>
+    )},
+    { key: 'total', title: 'الإجمالي المتوقع', render: (w: WorkOrder) => (
+      <span className="font-bold text-emerald-400">{formatCurrency(w.quantity * getDesignPrice(w.designId, designs))}</span>
+    )},
+    { key: 'expectedDelivery', title: 'تاريخ التسليم', render: (w: WorkOrder) => (
+      <span className="text-gray-400">{formatDate(w.expectedDelivery)}</span>
+    )},
+    { key: 'employee', title: 'الموظف المسؤول', render: (w: WorkOrder) => (
+      <span className="text-gray-400 text-xs">{w.responsibleEmployeeName || '—'}</span>
+    )},
+    { key: 'actions', title: '', render: (w: WorkOrder) => (
+      <div onClick={e => e.stopPropagation()}>
+        <Button size="sm" icon={<FileText size={13} />} loading={creatingWoId === w.id}
+          disabled={creatingWoId !== null && creatingWoId !== w.id}
+          onClick={() => createInvoiceFromWorkOrder(w)}>
+          إنشاء فاتورة
+        </Button>
+      </div>
+    )},
+  ];
+
+  const tabs = [
+    { key: 'invoices', label: 'الفواتير',              count: invoices.length },
+    { key: 'pending',  label: 'أوامر جاهزة للفوترة',   count: pendingWorkOrders.length },
+  ];
+
   return (
     <div className="space-y-6">
       <SectionHeader
         title="الفواتير"
         subtitle={`${invoices.length} فاتورة — إجمالي الإيرادات: ${formatCurrency(invoices.reduce((s, i) => s + i.total, 0))}`}
-        actions={<Button icon={<Plus size={16} />} onClick={openAdd}>فاتورة جديدة</Button>}
+        actions={<Button icon={<Plus size={16} />} onClick={() => setActiveTab('pending')}>إنشاء فاتورة</Button>}
       />
 
-      {/* Filters */}
-      <Card>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-48">
-            <SearchInput value={search} onChange={setSearch} placeholder="بحث برقم الفاتورة أو العميل..." />
-          </div>
-          <Input label="من تاريخ" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="min-w-40" />
-          <Input label="إلى تاريخ" type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   className="min-w-40" />
-          {(search || dateFrom || dateTo) && (
-            <Button variant="ghost" icon={<X size={14} />} onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}>
-              مسح
-            </Button>
-          )}
-          <div className="mr-auto text-left">
-            <p className="text-xs text-gray-500">إجمالي المعروض</p>
-            <p className="font-bold text-emerald-400">{formatCurrency(totalRevenue)}</p>
-          </div>
-        </div>
-      </Card>
+      <Tabs tabs={tabs} active={activeTab} onChange={k => setActiveTab(k as 'invoices' | 'pending')} />
 
-      <Card padding={false}>
-        <Table columns={columns} data={filtered} rowKey={i => i.id}
-          emptyText="لا توجد فواتير — أنشئ فاتورة جديدة" emptyIcon={<FileText size={40} />}
-          onRowClick={i => { setSelected(i); setViewOpen(true); }} />
-      </Card>
+      {activeTab === 'pending' ? (
+        <>
+          <Card>
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <ClipboardCheck size={16} className="text-gold" />
+              أوامر الشغل المكتملة أو المسلَّمة التي لم يتم إصدار فاتورة لها بعد
+            </div>
+          </Card>
+          <Card padding={false}>
+            <Table
+              columns={pendingColumns}
+              data={pendingWorkOrders}
+              rowKey={w => w.id}
+              emptyText="لا توجد أوامر شغل جاهزة للفوترة حاليًا"
+              emptyIcon={<ReceiptText size={40} />}
+            />
+          </Card>
+        </>
+      ) : (
+        <>
+          {/* Filters */}
+          <Card>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex-1 min-w-48">
+                <SearchInput value={search} onChange={setSearch} placeholder="بحث برقم الفاتورة أو العميل أو رقم الأمر..." />
+              </div>
+              <Input label="من تاريخ" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="min-w-40" />
+              <Input label="إلى تاريخ" type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   className="min-w-40" />
+              {(search || dateFrom || dateTo) && (
+                <Button variant="ghost" icon={<X size={14} />} onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}>
+                  مسح
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" icon={<Plus size={13} />} onClick={openAdd}>إضافة فاتورة يدويًا</Button>
+              <div className="mr-auto text-left">
+                <p className="text-xs text-gray-500">إجمالي المعروض</p>
+                <p className="font-bold text-emerald-400">{formatCurrency(totalRevenue)}</p>
+              </div>
+            </div>
+          </Card>
 
-      {/* Add/Edit Modal */}
+          <Card padding={false}>
+            <Table columns={columns} data={filtered} rowKey={i => i.id}
+              emptyText="لا توجد فواتير — أنشئ فاتورة جديدة" emptyIcon={<FileText size={40} />}
+              onRowClick={i => { setSelected(i); setViewOpen(true); }} />
+          </Card>
+        </>
+      )}
+
+      {/* Add/Edit Modal (manual) */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)}
         title={editing ? 'تعديل الفاتورة' : 'إنشاء فاتورة جديدة'} size="xl"
         footer={
@@ -316,6 +430,17 @@ export const Invoices: React.FC = () => {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="المدفوع (ج.م)" type="number" min={0} value={form.paid}
+              onChange={e => setForm(p => ({ ...p, paid: Number(e.target.value) }))} />
+            <div className="bg-dark-raised border border-dark-border rounded-xl px-4 py-2.5">
+              <p className="text-xs text-gray-500 mb-1">المتبقي</p>
+              <p className="text-sm font-semibold text-red-400">
+                {formatCurrency(Math.max(0, form.total - form.paid))}
+              </p>
+            </div>
+          </div>
+
           <Textarea label="ملاحظات" value={form.notes}
             onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
         </div>
@@ -327,21 +452,25 @@ export const Invoices: React.FC = () => {
           title={`عرض الفاتورة ${selected.invoiceNumber}`} size="xl"
           footer={
             <div className="flex gap-2">
-              <Button variant="ghost" icon={<Printer size={14} />} onClick={handlePrint}>طباعة</Button>
+              {canPrint && (
+                <Button variant="ghost" icon={<Printer size={14} />}
+                  onClick={() => handlePrintInvoice(selected, msg => toast(msg, 'error'))}>
+                  طباعة الفاتورة
+                </Button>
+              )}
               <Button variant="ghost" icon={<Pencil size={14} />} onClick={() => { setViewOpen(false); openEdit(selected); }}>تعديل</Button>
             </div>
           }
         >
-          <div className="bg-white rounded-xl overflow-hidden">
-            <PrintableInvoice ref={printRef} invoice={selected} />
+          <div className="bg-white rounded-xl overflow-x-auto">
+            <InvoicePrintTemplate
+              invoice={selected}
+              workOrder={selected.workOrderId ? workOrders.find(w => w.id === selected.workOrderId) : null}
+              design={selected.designId ? designs.find(d => d.id === selected.designId) : null}
+            />
           </div>
         </Modal>
       )}
-
-      {/* Hidden print target */}
-      <div className="hidden">
-        {selected && <PrintableInvoice ref={printRef} invoice={selected} />}
-      </div>
 
       <ConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete} loading={loading}

@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Plus, Pencil, Trash2, Eye, ClipboardList, X, Printer } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Pencil, Trash2, Eye, ClipboardList, X, Printer, FileText, ReceiptText } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
+import { canViewFinance } from '../lib/permissions';
 import {
   Button, Card, Badge, Modal, Input, Select, Textarea,
   ConfirmDialog, SearchInput, SectionHeader, Table,
@@ -150,8 +153,11 @@ const emptyForm = () => ({
 
 export const WorkOrders: React.FC = () => {
   const { workOrders, designs, employees, addWorkOrder, updateWorkOrder, deleteWorkOrder } = useData();
+  const { role } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const printRef = useRef<HTMLDivElement>(null);
+  const canSeeInvoicing = canViewFinance(role);
 
   const [search,     setSearch]     = useState('');
   const [statusF,    setStatusF]    = useState('');
@@ -558,6 +564,35 @@ export const WorkOrders: React.FC = () => {
                 <span>{selected.quantity} متر مطلوب</span>
               </div>
             </div>
+
+            {/* Invoice status — full_admin & finance_user only */}
+            {canSeeInvoicing && (
+              <div className="bg-dark-raised border border-dark-border rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5">
+                  <ReceiptText size={13} /> الفوترة
+                </p>
+                {selected.invoiceId ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-400">تم إنشاء الفاتورة</p>
+                      <p className="text-xs text-gray-500 font-mono">{selected.invoiceNumber}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" icon={<FileText size={13} />}
+                      onClick={() => { setDetailOpen(false); navigate(`/invoices?invoiceId=${selected.invoiceId}`); }}>
+                      عرض الفاتورة
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-gray-400">لم يتم إنشاء فاتورة بعد</p>
+                    <Button size="sm" icon={<FileText size={13} />}
+                      onClick={() => { setDetailOpen(false); navigate(`/invoices?workOrderId=${selected.id}`); }}>
+                      إنشاء فاتورة من أمر الشغل
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Design wefts */}
             {selected.designId && (() => {

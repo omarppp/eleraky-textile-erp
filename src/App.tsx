@@ -34,6 +34,7 @@ import { ActivityLogs } from './pages/settings/ActivityLogs';
 import { DataSetup } from './pages/settings/DataSetup';
 import { Employees } from './pages/employees/Employees';
 import { FabricCosting } from './pages/costing/FabricCosting';
+import { PrintInvoice } from './pages/invoices/PrintInvoice';
 
 // =====================================================================
 // ERROR BOUNDARY
@@ -140,6 +141,10 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
+      {/* Standalone print page — no sidebar/navbar, own permission gate */}
+      <Route path="/invoices/:id/print" element={<Protected><PrintInvoice /></Protected>} />
+
       <Route element={<Protected><Layout /></Protected>}>
         {/* Core */}
         <Route path="/"                        element={<Dashboard />} />

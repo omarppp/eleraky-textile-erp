@@ -26,6 +26,12 @@ export function canAccessModule(role: UserRole, module: PermissionModule): boole
   return ROLE_MODULES[role]?.includes(module) ?? false;
 }
 
+// Financial data (prices, invoices, totals) — visible to full_admin & finance_user only
+export const FINANCE_ROLES: UserRole[] = ['full_admin', 'finance_user'];
+export function canViewFinance(role: UserRole): boolean {
+  return FINANCE_ROLES.includes(role);
+}
+
 export const ROLE_LABELS: Record<UserRole, string> = {
   full_admin:      'مدير النظام الكامل',
   operations_user: 'تشغيل',

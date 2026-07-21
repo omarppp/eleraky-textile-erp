@@ -140,4 +140,17 @@
   .no-print { display: none !important; }
   .print-only { display: block !important; }
   .print-break { page-break-after: always; }
+
+  .print-page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 16mm;
+    background: white;
+    color: #111;
+    direction: rtl;
+  }
+
+  .print-preview-bg { background: white !important; padding: 0 !important; margin: 0 !important; }
 }
+
+.print-only { display: none; }

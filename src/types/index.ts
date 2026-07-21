@@ -28,6 +28,7 @@ export interface Design {
   hadafatCount: number;
   assignedMachine: number;
   imageUrl?: string;
+  price?: number;       // EGP — missing on old docs, treat as 0
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -61,6 +62,10 @@ export interface WorkOrder {
   responsibleEmployeeName?: string;
   fingerOrder?: FingerOrderItem[];
   notes?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoiceStatus?: 'pending' | 'invoiced';
+  invoicedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -201,6 +206,8 @@ export interface InvoiceItem {
   total: number;
 }
 
+export type InvoiceStatus = 'unpaid' | 'partial' | 'paid';
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -216,6 +223,15 @@ export interface Invoice {
   remaining?: number;
   notes?: string;
   date: string;
+  // Work-order-linked invoice fields (present when created from a work order)
+  workOrderId?: string;
+  workOrderNumber?: string;
+  designId?: string;
+  designName?: string;
+  item?: string;
+  quantity?: number;
+  unitPrice?: number;
+  status?: InvoiceStatus;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, Eye, Palette, X, Image } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
+import { canViewFinance } from '../lib/permissions';
 import {
   Button, Card, Badge, Modal, Input, Select, Textarea,
   ConfirmDialog, SearchInput, SectionHeader, Table, useToast,
 } from '../components/ui';
 import type { Design, DesignWeft } from '../types';
-import { formatDate } from '../lib/utils';
+import { formatDate, formatCurrency } from '../lib/utils';
 
 const MACHINE_OPTIONS = Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: `ماكينة ${i + 1}` }));
 
@@ -19,6 +21,7 @@ const emptyForm = () => ({
   hadafatCount: 4,
   assignedMachine: 1,
   imageUrl: '',
+  price: 0,
   notes: '',
 });
 
@@ -29,9 +32,14 @@ const getWefts = (d: Design): DesignWeft[] => {
   return [];
 };
 
+/** Old designs have no `price` field — treat as 0. */
+const getPrice = (d: Design): number => d.price ?? 0;
+
 export const Designs: React.FC = () => {
   const { designs, addDesign, updateDesign, deleteDesign } = useData();
+  const { role } = useAuth();
   const { toast } = useToast();
+  const canSeePrice = canViewFinance(role);
 
   const [search,     setSearch]     = useState('');
   const [machineF,   setMachineF]   = useState('');
@@ -78,6 +86,7 @@ export const Designs: React.FC = () => {
       hadafatCount: d.hadafatCount,
       assignedMachine: d.assignedMachine,
       imageUrl: d.imageUrl || '',
+      price: getPrice(d),
       notes: d.notes || '',
     });
     setErrors({});
@@ -103,6 +112,9 @@ export const Designs: React.FC = () => {
     if (!form.wefts[0]?.name.trim()) e.wefts = 'اللحمة الأولى مطلوبة';
     if (!form.warp.trim()) e.warp = 'السدا مطلوب';
     if (form.hadafatCount < 1) e.hadafatCount = 'عدد الحدافات يجب أن يكون أكبر من صفر';
+    if (canSeePrice && (form.price === null || form.price === undefined || form.price < 0)) {
+      e.price = 'سعر التصميم مطلوب';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -122,6 +134,9 @@ export const Designs: React.FC = () => {
         assignedMachine: form.assignedMachine,
         imageUrl: form.imageUrl,
         notes: form.notes,
+        // Only touch price when the user is allowed to see/edit it — otherwise
+        // leave the existing value untouched (and default new designs to 0).
+        ...(canSeePrice ? { price: form.price } : editing ? {} : { price: 0 }),
       };
       if (editing && selected) {
         await updateDesign(selected.id, payload);
@@ -176,6 +191,9 @@ export const Designs: React.FC = () => {
     { key: 'assignedMachine', title: 'الماكينة', render: (d: Design) => (
       <Badge color="purple">ماكينة {d.assignedMachine}</Badge>
     )},
+    ...(canSeePrice ? [{ key: 'price', title: 'سعر التصميم', render: (d: Design) => (
+      <span className="font-semibold text-emerald-400">{formatCurrency(getPrice(d))}</span>
+    )}] : []),
     { key: 'createdAt', title: 'التاريخ', render: (d: Design) => (
       <span className="text-gray-500">{formatDate(d.createdAt)}</span>
     )},
@@ -331,6 +349,18 @@ export const Designs: React.FC = () => {
             error={errors.hadafatCount}
           />
 
+          {/* Price — full_admin & finance_user only */}
+          {canSeePrice && (
+            <Input
+              label="سعر التصميم (ج.م) *"
+              type="number"
+              min={0}
+              value={form.price}
+              onChange={e => setForm(p => ({ ...p, price: Number(e.target.value) }))}
+              error={errors.price}
+            />
+          )}
+
           {/* Image URL */}
           <div className="sm:col-span-2">
             <Input
@@ -378,6 +408,7 @@ export const Designs: React.FC = () => {
                 { label: 'السدا',       value: selected.warp },
                 { label: 'عدد الحدافات', value: String(selected.hadafatCount) },
                 { label: 'الماكينة',    value: `ماكينة ${selected.assignedMachine}` },
+                ...(canSeePrice ? [{ label: 'سعر التصميم', value: formatCurrency(getPrice(selected)) }] : []),
               ].map(r => (
                 <div key={r.label} className="bg-dark-raised rounded-xl p-3 border border-dark-border">
                   <p className="text-xs text-gray-500 mb-1">{r.label}</p>

@@ -81,7 +81,7 @@ interface DataContextType {
   deleteInventoryItem: (id: string) => Promise<void>;
   addMovement: (m: Omit<InventoryMovement,'id'|'createdAt'>) => Promise<void>;
 
-  addInvoice:    (i: Omit<Invoice,'id'|'createdAt'|'updatedAt'|'invoiceNumber'>) => Promise<void>;
+  addInvoice:    (i: Omit<Invoice,'id'|'createdAt'|'updatedAt'|'invoiceNumber'>) => Promise<{ id: string; invoiceNumber: string }>;
   updateInvoice: (id: string, i: Partial<Invoice>) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
 
@@ -240,8 +240,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addInvoice = useCallback(async (i: Omit<Invoice,'id'|'createdAt'|'updatedAt'|'invoiceNumber'>) => {
     const now = new Date().toISOString();
     const invoiceNumber = await nextNum('INV');
-    await addDoc(collection(db, 'invoices'), { ...i, invoiceNumber, createdAt: now, updatedAt: now });
+    const ref = await addDoc(collection(db, 'invoices'), { ...i, invoiceNumber, createdAt: now, updatedAt: now });
     logActivity({ type: 'invoice', action: 'إنشاء', description: `فاتورة ${invoiceNumber} للعميل ${i.customerName} — ${i.total} جنيه` });
+    return { id: ref.id, invoiceNumber };
   }, []);
   const updateInvoice = useCallback(async (id: string, i: Partial<Invoice>) => {
     await updateDoc(doc(db, 'invoices', id), { ...i, updatedAt: new Date().toISOString() } as Record<string, unknown>);
